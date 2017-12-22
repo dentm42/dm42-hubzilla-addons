@@ -1,0 +1,4 @@
+url: $baseurl/cart
+requires: local_channel
+name: Cart
+photo: $baseurl/addon/cart/view/img/cart.png
