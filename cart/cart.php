@@ -247,10 +247,11 @@ function cart_additem_hook (&$hookdata) {
 	array_unshift($params,$sql);	
 	$r=call_user_func_array('q', $params);
 }
-
+	
 //function cart_do_additem (array $iteminfo,&$c) {
 function cart_do_additem (&$hookdata) {
-
+	
+    $startcontent = $hookdata["content"];
 	$iteminfo=$hookdata["iteminfo"];
 	$cart_itemtypes = cart_maybeunjson(get_sysconfig("cart_itemtypes"));
 	$required = Array("item_sku","item_qty","item_desc","item_price");
@@ -1203,9 +1204,7 @@ function cart_pagecontent($a=null) {
         return;
     }
 
-    notice( t('Cart Enabled!') . EOL);
     $sellernick = argv(1);
-    notice( t('Cart Enabled! (Seller:'.$sellernick.')') . EOL);
 
     $seller = channelx_by_nick($sellernick);
 
@@ -1220,7 +1219,7 @@ function cart_pagecontent($a=null) {
 	
     // Determine if the observer is the channel owner so the ACL dialog can be populated
     if ($is_seller) {
-                $b['content']="<h1>SELLER!</h1>";
+		// DO Seller Specific Setup
 		nav_set_selected('Cart');
 	}
 
@@ -1229,17 +1228,34 @@ function cart_pagecontent($a=null) {
 		return $b['content'];
 	}
 
-	$testcatalog = get_pconfig ($id,'cart','enable_test_catalog');
-    if ((argc() > 3) && (argv(2) === 'catalog')) {
-		if ($testcatalog == "Yes") {
-                    $b['content']="<h1>Test Catalog</h1>";
-		    return $b['content'];
+	$testcatalog = get_pconfig ( \App::$profile['profile_uid'] ,'cart','enable_test_catalog');
+        $testcatalog = $testcatalog ? $testcatalog : 0;
+                    notice( t('incatalog') . EOL);
+
+        if ((argc() >= 3) && (argv(2) == 'catalog')) {
+                    notice( t('incatalog') . EOL);
+		if ($testcatalog) {
+                    notice( t('incatalog') . EOL);
+                    return cart_test_catalog();
 		} else {
-                    $b['content']="<h1>Catalog Not Enabled</h1>";
-		    return $b['content'];
+                    return "<h1>Catalog Not Enabled</h1>";
 		}
 	}
+	
+    return "<h1>CART CONTENTS</h1>";
+}
 
-        $b['content'] .= "<h1>CART CONTENTS</h1>";
-        return $b['content'];
+function cart_test_catalog () {
+
+	$items = Array (
+		"sku-1"=>Array("item_sku"=>"sku-1","item_desc"=>"Description Item 1","item_price"=>5.55),
+		"sku-2"=>Array("item_sku"=>"sku-2","item_desc"=>"Description Item 2","item_price"=>6.55),
+		"sku-3"=>Array("item_sku"=>"sku-3","item_desc"=>"Description Item 3","item_price"=>7.55),
+		"sku-4"=>Array("item_sku"=>"sku-4","item_desc"=>"Description Item 4","item_price"=>8.55),
+		"sku-5"=>Array("item_sku"=>"sku-5","item_desc"=>"Description Item 5","item_price"=>9.55),
+		"sku-6"=>Array("item_sku"=>"sku-6","item_desc"=>"Description Item 6","item_price"=>10.55)
+	);
+
+        $template = get_markup_template('basic_catalog.tpl','addon/cart/');
+	return replace_macros($template, array('$items'	=> $items ));
 }
