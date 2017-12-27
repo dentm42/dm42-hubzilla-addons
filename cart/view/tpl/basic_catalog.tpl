@@ -4,6 +4,7 @@
   </div>
   <div class='section-content-wrapper'>
     <form method="post">
+    <input type="hidden" name="cart_posthook" value="add_item">
     <table>
         <tr>
             <th></th>

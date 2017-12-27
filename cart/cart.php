@@ -3,7 +3,7 @@
 /**
  * Name: cart
  * Description: Core cart utilities for orders and payments
- * Version: 0.1
+ * Version: 0.5
  * Author: Matthew Dent <dentm42@dm42.net>
  * MinVersion: 2.8
  */
@@ -22,7 +22,7 @@
   */
 
 
-$cart_version = 0.1;
+$cart_version = 0.5;
 load_config("cart");
 
 function cart_maybeunjson ($value) {
@@ -166,9 +166,18 @@ function cart_loadorder ($orderhash) {
 	if (!$r) {
 		return Array("order"=>$order,"items"=>null);
 	}
+	$items=Array();
+	foreach ($r as $key=>$iteminfo) {
+		$items[$key]=$iteminfo;
+		$items[$key]["itemtotal"]=$iteminfo["item_qty"]*$iteminfo["item_price"];
+		$items[$key]["itemtax"]=;
+	}
 	$order["items"]=$r;
+    $hookdata=Array("order"=>$order);
 
-	return $order;
+	call_hook("cart_calc_totals",$hookdata);
+    
+	return $hookdata["order"];
 }
 
 function cart_getorderhash ($create=false) {
@@ -575,14 +584,8 @@ function cart_do_updateitem (&$hookdata) {
 
 function cart_display_item (&$hookdata) {
 	$item = $hookdata["item"];
-	$extended = $item["item_qty"] * $item["item_price"];
-	$hookdata['content'] .= "<div class='item'>";
-	$hookdata['content'] .= "<div class='sku'>".$item["item_sku"]."</div>";
-	$hookdata['content'] .= "<div class='description'>".$item["item_description"]."</div>";
-	$hookdata['content'] .= "<div class='qty'>".$item["item_qty"]."</div>";
-	$hookdata['content'] .= "<div class='priceea'>".$item["item_price"]."</div>";
-	$hookdata['content'] .= "<div class='priceext'>".$extended."</div>";
-	$hookdata['content'] .= "</div>";
+	$hookdata["content"].=replace_macros(get_markup_template('cart_item_basic.tpl','addon/cart/'), array('$item'	=> $item ));
+	
 }
 
 function cart_calc_totals(&$hookdata) {
@@ -594,16 +597,19 @@ function cart_calc_totals(&$hookdata) {
 	$subtotal=0;
 	$taxtotal=0;
 	$ordertotal=0;
-	foreach ($items as $item) {
+	foreach ($items as $key=>$item) {
 		$linetotal=$item["qty"]*$item["item_price"];
+		$hookdata["order"]["items"][$key]["extended"]=$linetotal;
+		
 		$linetax=$linetotal * $item["item_tax_rate"];
+		
 		$subtotal = $subtotal + $linetotal;
 		$taxtotal = $taxtotal + $linetax;
 	}
 	$ordertotal = $subtotal+$taxtotal;
-	$ordermeta["totals"]["Tax"]=$taxtotal;
-	$ordermeta["totals"]["Subtotal"]=$subtotal;
-	$ordermeta["totals"]["Order Total"]=$ordertotal;
+	$ordermeta["totals"]["Tax"]=sprintf("%01.2f",$taxtotal);;
+	$ordermeta["totals"]["Subtotal"]=sprintf("%01.2f",$subtotal);;
+	$ordermeta["totals"]["OrderTotal"]=sprintf("%01.2f",$ordertotal);
 	cart_update_ordermeta($ordermeta,$orderhash);
 	$hookdata["order"]["order_meta"]["totals"]=$ordermeta["totals"];
 }
@@ -998,6 +1004,7 @@ function cart_load(){
 	Zotlabs\Extend\Hook::register('cart_orderpaid','addon/cart/cart.php','cart_orderpaid_hook');
 	Zotlabs\Extend\Hook::register('cart_do_orderpaid','addon/cart/cart.php','cart_do_orderpaid');
 	Zotlabs\Extend\Hook::register('cart_before_checkout','addon/cart/cart.php','cart_calc_totals',1,10);
+	Zotlabs\Extend\Hook::register('cart_calc_totals','addon/cart/cart.php','cart_calc_totals',1,50);
 	Zotlabs\Extend\Hook::register('cart_display_after','addon/cart/cart.php','cart_display_totals',1,99);
 	Zotlabs\Extend\Hook::register('cart_mod_content','addon/cart/cart.php','cart_mod_content',1,99);
 }
@@ -1015,6 +1022,7 @@ function cart_unload(){
 	Zotlabs\Extend\Hook::unregister('cart_orderpaid','addon/cart/cart.php','cart_orderpaid_hook');
 	Zotlabs\Extend\Hook::unregister('cart_do_orderpaid','addon/cart/cart.php','cart_do_orderpaid');
 	Zotlabs\Extend\Hook::unregister('cart_before_checkout','addon/cart/cart.php','cart_calc_totals',1,10);
+	Zotlabs\Extend\Hook::unregister('cart_calc_totals','addon/cart/cart.php','cart_calc_totals',1,10);
 	Zotlabs\Extend\Hook::unregister('cart_display_after','addon/cart/cart.php','cart_display_totals',1,99);
 	Zotlabs\Extend\Hook::unregister('cart_mod_content','addon/cart/cart.php','cart_mod_content',1,99);
 }
@@ -1066,7 +1074,14 @@ function cart_module() { return; }
  ***	cart_orderpaid_{itemtype} ({item array})
  * 		cart_fulfill_item ({item array})
  * 		cart_fulfill_item_{itemtype} ({item array})
- * 
+ ***    cart_get_catalog ({items array})
+ ***    cart_filter_catalog ({items array})
+ ***    cart_aside_filter ({aside_content})
+ ***    cart_mainmenu_filter ({menu array})
+ *                   ["order"]=sort order
+ *                   ["heading"]=heading to display item under
+ * 					 ["text"]=Menu item text
+ *                   ["URL"]=URL to link to
  *		
  *
  */
@@ -1074,7 +1089,6 @@ function cart_module() { return; }
 function cart_settings_post(&$a,&$s) {
 	if(! local_channel())
 		return;
-
 
         $prev_enable = get_pconfig(local_channel(),'cart','enable');
 
@@ -1167,30 +1181,35 @@ function cart_init() {
 
 }
 
+function cart_post_add_item () {
+	$items=Array();
+	call_hooks('cart_get_catalog',$items);
+
+	$newitem = $items[$_POST["add"]];
+	$hookdata=Array("content"=>'',"iteminfo"=>$newitem);
+	call_hook('cart_do_additem',$hookdata);
+	notice (t('Item Added') . EOL);
+}
+	
 function cart_post(&$a) {
 	$cart_formname=preg_replace('/[^a-zA-Z0-9\_]/','',$_POST["cart_posthook"]);
 	$formhook = "cart_post_".$cart_formname;
 	call_hooks($formhook);
+	$base_url = ( isset($_SERVER['HTTPS']) && $_SERVER['HTTPS']=='on' ? 'https' : 'http' ) . '://' .  $_SERVER['HTTP_HOST'];
+	$url = $base_url . $_SERVER["REQUEST_URI"];
+	goaway($url);
 }
 
 function cart_mod_content(&$arr) {
-  \App::$page['aside'] =  '<div> TEST </div>';
+  $aside = "";
+  call_hooks ('cart_aside_filter',$aside);
+  \App::$page['aside'] =  $aside;
   $arr['content'] = cart_pagecontent($a);
   $arr['replace'] = true;
   return ;
 }
 
 function cart_pagecontent($a=null) {
-
-
-	/*
-	 * 	$some_setting = get_pconfig(local_channel(), 'cart','some_setting');
-	 */
-
-	// Whatever you put in settings, will show up on the left nav of your pages.
-	/*
-	 * $b['layout']['region_aside'] .= '<div>' . htmlentities($some_setting) .  '</div>';
-	 */
 
     if(observer_prohibited(true)) {
         return login();
@@ -1223,39 +1242,63 @@ function cart_pagecontent($a=null) {
 		nav_set_selected('Cart');
 	}
 
-	if ((argc() > 3) && (argv(2) === 'order')) {
-                $b['content']="<h1>Order Info</h1>";
-		return $b['content'];
-	}
+	if ((argc() >= 3) && (argv(2) === 'order')) {
+		$orderhash=argv(3);
 
-	$testcatalog = get_pconfig ( \App::$profile['profile_uid'] ,'cart','enable_test_catalog');
-        $testcatalog = $testcatalog ? $testcatalog : 0;
-                    notice( t('incatalog') . EOL);
-
-        if ((argc() >= 3) && (argv(2) == 'catalog')) {
-                    notice( t('incatalog') . EOL);
-		if ($testcatalog) {
-                    notice( t('incatalog') . EOL);
-                    return cart_test_catalog();
-		} else {
-                    return "<h1>Catalog Not Enabled</h1>";
+		if ($orderhash == '') {
+			$orderhash = cart_get_orderhash(false);
 		}
+
+		if (!$orderhash) {
+			notice ( t('Order not found.' . EOL);
+			return "<h1>Order Not Found</h1>";
+		}
+		
+		$cart_template = get_markup_template('basic_cart.tpl','addon/cart/');
+		call_hooks('cart_show_order_filter',$cart_template);
+		$order = cart_loadorder($orderhash);
+		return replace_macros($cart_template, $order);
 	}
-	
-    return "<h1>CART CONTENTS</h1>";
+		
+		
+    if ((argc() >= 3) && (argv(2) == 'catalog')) {
+		$items = Array();
+
+		$testcatalog = get_pconfig ( \App::$profile['profile_uid'] ,'cart','enable_test_catalog');
+		$testcatalog = $testcatalog ? $testcatalog : 0;
+
+		if ($testcatalog) {
+			insert($hook, $fn, $version = 0, $priority = 0)
+			Zotlabs\Extend\Hook::insert('cart_get_catalog','cart_get_test_catalog',1,0);
+		}
+		call_hooks('cart_get_catalog',$items);
+		call_hooks('cart_filter_catalog',$items);
+		if (count($items)<1) {
+			return "<H1>Catalog has no items</H1>";
+		}
+		$template = get_markup_template('basic_catalog.tpl','addon/cart/');
+		return replace_macros($template, array('$items'	=> $items ));
+	}
+
+	$menu = Array();
+
+	call_hooks('cart_mainmenu_filter',$menu);
+
+
+    
 }
 
-function cart_test_catalog () {
+function cart_get_test_catalog (&$items) {
 
-	$items = Array (
+	if (!is_array($items)) {$items = Array();}
+
+	return array_merge($items,Array (
 		"sku-1"=>Array("item_sku"=>"sku-1","item_desc"=>"Description Item 1","item_price"=>5.55),
 		"sku-2"=>Array("item_sku"=>"sku-2","item_desc"=>"Description Item 2","item_price"=>6.55),
 		"sku-3"=>Array("item_sku"=>"sku-3","item_desc"=>"Description Item 3","item_price"=>7.55),
 		"sku-4"=>Array("item_sku"=>"sku-4","item_desc"=>"Description Item 4","item_price"=>8.55),
 		"sku-5"=>Array("item_sku"=>"sku-5","item_desc"=>"Description Item 5","item_price"=>9.55),
 		"sku-6"=>Array("item_sku"=>"sku-6","item_desc"=>"Description Item 6","item_price"=>10.55)
-	);
-
-        $template = get_markup_template('basic_catalog.tpl','addon/cart/');
-	return replace_macros($template, array('$items'	=> $items ));
+	));
+	
 }
