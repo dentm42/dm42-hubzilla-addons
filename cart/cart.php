@@ -69,8 +69,8 @@ function cart_dbCleanup () {
 
 	$dbsql = Array (
 	    1 => Array (
-	      	"DROP TABLE IF EXISTS `cart_orders;`",
-			"DROP TABLE IF EXISTS `cart_orderitems`;"
+	      	"DROP TABLE IF EXISTS cart_orders",
+			"DROP TABLE IF EXISTS cart_orderitems"
 	    )
     );
     $sql = $dbsql[$dbver];
@@ -94,10 +94,11 @@ function cart_dbUpgrade () {
 	logger ('[cart] get sysconfig.');
 
 	$dbver = $dbverconfig ? $dbverconfig : 0;
+	notice ('[cart] current dbver = '.$dbver.'.');
 
 	$dbsql = Array (
 		1 => Array (
-			"DROP TABLE IF EXISTS `cart_orders;`",
+			"DROP TABLE IF EXISTS cart_orders",
 			// order_currency = ISO4217 currency alphabetic code
 			// buyer_altid = email address or other unique identifier for the buyer
 			"CREATE TABLE `cart_orders` (
@@ -109,20 +110,20 @@ function cart_dbUpgrade () {
 				`order_expires` datetime,
 				`order_checkedout` datetime,
 				`order_paid` datetime,
-				`order_currency` default 'USD',
+				`order_currency` varchar(10) default 'USD',
 				`order_meta` text,
 				UNIQUE (order_hash)
 				) ENGINE = MYISAM DEFAULT CHARSET=utf8;
 			",
 			"alter table `cart_orders` add index (`seller_channel`)",
-			"DROP TABLE IF EXISTS `cart_orderitems`;",
+			"DROP TABLE IF EXISTS cart_orderitems",
 			"CREATE TABLE cart_orderitems (
 				`id` int(10) UNSIGNED NOT NULL PRIMARY KEY AUTO_INCREMENT,
 				`order_hash` varchar(255),
 				`item_lastupdate` datetime,
 				`item_type` varchar(25),
 				`item_sku` varchar(25),
-				`item_desc` varchar(255).
+				`item_desc` varchar(255),
 				`item_qty` int(10) UNSIGNED,
 				`item_price` numeric(7,2),
 				`item_tax_rate` numeric (4,4),
@@ -137,10 +138,11 @@ function cart_dbUpgrade () {
 	);
 
    	foreach ($dbsql as $ver => $sql) {
-		if ($dbver < $ver) {
+		if ($ver < $dbver) {
 			continue;
 		}
 		foreach ($sql as $query) {
+	                logger ('[cart] dbSetup:'.$query);
 			$r = q($query);
 			if (!$r) {
 				notice ('[cart] Error running dbUpgrade.');
@@ -150,6 +152,7 @@ function cart_dbUpgrade () {
 		}
 		cart_setsysconfig("dbver".$ver);
 	}
+	notice ('[cart] dbUpgrade to ('.$ver.') Successful.');
 	return UPDATE_SUCCESS;
 }
 
@@ -162,22 +165,29 @@ function cart_loadorder ($orderhash) {
 	$order = $r[0];
 	$order["order_meta"]=cart_maybeunjson($order["order_meta"]);
 	
-	$r = q ("select * from cart_orderitems where order_hash = '%s'");
+	$r = q ("select * from cart_orderitems where order_hash = '%s'",dbesc($orderhash));
+        logger ("[cart] Cart Has No Items orderhash = ".$orderhash);
 	if (!$r) {
+                logger ("[cart] Cart Has No Items");
 		return Array("order"=>$order,"items"=>null);
 	}
 	$items=Array();
 	foreach ($r as $key=>$iteminfo) {
 		$items[$key]=$iteminfo;
-		$items[$key]["itemtotal"]=$iteminfo["item_qty"]*$iteminfo["item_price"];
-		$items[$key]["itemtax"]=;
+		$items[$key]["extended"]=$iteminfo["item_qty"]*$iteminfo["item_price"];
+		$items[$key]["itemtax"]=0;
+                $ordertaxtotal=$ordertaxtotal + $items[$key]["itemtax"];
+                $ordersubtotal=$ordersubtotal + $items[$key]["extended"];
 	}
-	$order["items"]=$r;
-    $hookdata=Array("order"=>$order);
-
-	call_hook("cart_calc_totals",$hookdata);
-    
-	return $hookdata["order"];
+        $ordertotal=$ordertaxtotal + $ordersubtotal;
+	$order["items"]=$items;
+        $order["totals"]["Subtotal"]=$ordersubtotal;
+        $order["totals"]["Tax"]=$ordersubtotal;
+        $order["totals"]["OrderTotal"]=$ordertotal;
+        $hookdata=$order;
+	call_hooks("cart_calc_totals",$hookdata);
+        logger ("[cart] cart_loadorder order: ".print_r($hookdata,true));
+	return $hookdata;
 }
 
 function cart_getorderhash ($create=false) {
@@ -187,20 +197,45 @@ function cart_getorderhash ($create=false) {
 	$cartemail = isset($_SESSION["cart_email_addy"]) ? $_SESSION["cart_email_addy"] : null;
 	
 	if ($orderhash) {
+                logger ("orderhash in SESSION = ".$orderhash);
 		$r = q("select * from cart_orders where order_hash = '%s' limit 1",dbesc($orderhash));
 		if (!$r) {
 			$orderhash=null;
-		}
-		$order = $r[0];
+		} else {
+		    $order = $r[0];
 
-		if ($order["buyer_xchan"]!=$observerhash) {
-			$orderhash=null;
-		}
+                    $orderhash = $order["order_hash"];
 
-		if ($order["locked"]!=null) {
+		    if ($order["buyer_xchan"]!=$observerhash) {
 			$orderhash=null;
-		}
-	}
+		    }
+
+		    if ($order["order_checkedout"]!=null) {
+			$orderhash=null;
+		    }
+               }
+	} else {
+               logger ("orderhash not in SESSION - search db");
+               $r = q("select * from cart_orders where buyer_xchan = '%s' and order_checkedout is null limit 1",dbesc($observerhash));
+
+               if (!$r) {
+		    $orderhash=null;
+                    logger ("no matching orderhash in db");
+               } else {
+		    $order = $r[0];
+
+                    $orderhash = $order["order_hash"];
+
+		    if ($order["buyer_xchan"]!=$observerhash) {
+			$orderhash=null;
+		    }
+
+		    if ($order["order_checkedout"]!=null) {
+			$orderhash=null;
+		    }
+               }
+
+        }
 
 	if (!$orderhash && $create === true) {
 		$channel=\App::get_channel();
@@ -220,19 +255,21 @@ function cart_additem_hook (&$hookdata) {
 
 	$order=$hookdata["order"];
 	$item=$hookdata["item"];
-
+        $item["order_hash"] = $order["order_hash"];
 	if (isset($item["item_meta"])) {
 		$item["item_meta"] = cart_maybejson($item["item_meta"]);
 	}
 
+	logger("[cart] AddItem Hookdata: ".print_r($hookdata,true));
+	logger("[cart] AddItem: ".print_r($item,true));
 	$keys = Array (
 		"order_hash"=>Array("key"=>"order_hash","cast"=>"'%s'","escfunc"=>"dbesc"),
 		"item_desc"=>Array("key"=>"item_desc","cast"=>"'%s'","escfunc"=>"dbesc"),
 		"item_type"=>Array("key"=>"item_type","cast"=>"'%s'","escfunc"=>"dbesc"),
 		"item_sku"=>Array("key"=>"item_sku","cast"=>"'%s'","escfunc"=>"dbesc"),
 		"item_qty"=>Array("key"=>"item_qty","cast"=>"%d","escfunc"=>"intval"),
-		"item_price"=>Array("key"=>"item_price","cast"=>"%d","escfunc"=>"floatval"),
-		"item_tax_rate"=>Array("key"=>"item_tax_rate","cast"=>"%d","escfunc"=>"floatval"),
+		"item_price"=>Array("key"=>"item_price","cast"=>"%f","escfunc"=>"floatval"),
+		"item_tax_rate"=>Array("key"=>"item_tax_rate","cast"=>"%f","escfunc"=>"floatval"),
 		"item_meta"=>Array("key"=>"item_meta","cast"=>"'%s'","escfunc"=>"dbesc"),
 		);
 
@@ -243,29 +280,32 @@ function cart_additem_hook (&$hookdata) {
 	foreach ($keys as $key=>$cast) {
 		if (isset($item[$key])) {
 			$colnames .= ($count > 0) ? "," : '';
-			$colnames .= $cast[$key]["key"];
+			$colnames .= $cast["key"];
 			$valuecasts .= ($count > 0) ? "," : '';
-			$valuecasts .= $cast[$key]["cast"];
-			$params[] = $cast[$key]["escfunc"]($item[$key]);
+			$valuecasts .= $cast["cast"];
+                        $escfunc = $cast["escfunc"];
+                        logger ("[cart] escfunc = ".$escfunc);
+			$params[] = $escfunc($item[$key]);
 			$count++;
 		}
 	}
 
-	$sql = "insert into cart_orderitems (".$colnames.") valuse (".$valuecasts.")";
-	
+	$sql = "insert into cart_orderitems (".$colnames.") values (".$valuecasts.")";
 	array_unshift($params,$sql);	
+	logger("[cart] insert item call q params: ".print_r($params,true));
 	$r=call_user_func_array('q', $params);
+        logger('[cart] post insert r = '.print_r($r,true));
 }
 	
 //function cart_do_additem (array $iteminfo,&$c) {
 function cart_do_additem (&$hookdata) {
 	
-    $startcontent = $hookdata["content"];
+        $startcontent = $hookdata["content"];
 	$iteminfo=$hookdata["iteminfo"];
-	$cart_itemtypes = cart_maybeunjson(get_sysconfig("cart_itemtypes"));
+	$cart_itemtypes = cart_maybeunjson(get_pconfig("cart_itemtypes"));
 	$required = Array("item_sku","item_qty","item_desc","item_price");
 	foreach ($required as $key) {
-		if (!array_has_key($iteminfo,$key)) {
+		if (!array_key_exists($key,$iteminfo)) {
 			$hookdata["content"]=$startcontent;
 			$hookdata["errorcontent"][]='';
 			$hookdata["error"][]="[cart] Cannot add item, missing required parameter.";
@@ -281,7 +321,6 @@ function cart_do_additem (&$hookdata) {
 	}
 
 	$calldata = Array('order'=>$order,'item'=>$iteminfo);
-
 	$itemtype = isset($calldata['item']['item_type']) ? $calldata['item']['item_type'] : null;
 
 	if ($itemtype) {
@@ -299,7 +338,6 @@ function cart_do_additem (&$hookdata) {
 	}
 	
 	if (!isset($calldata["item"])) { return; }
-	
 	call_hooks('cart_order_before_additem',$calldata);
 
 	$hookdata["content"] .= isset($calldata["content"]) ? $calldata["content"] : '';
@@ -982,6 +1020,7 @@ function cart_uninstall() {
 	if ($dropTablesOnUinstall === 1) {
   	        logger ('[cart] DB Cleanup table.',LOGGER_DEBUG);
 		cart_dbCleanup ();
+	        cart_delsysconfig("dbver");
 	}
 	
 	cart_delsysconfig("appver");
@@ -1007,6 +1046,7 @@ function cart_load(){
 	Zotlabs\Extend\Hook::register('cart_calc_totals','addon/cart/cart.php','cart_calc_totals',1,50);
 	Zotlabs\Extend\Hook::register('cart_display_after','addon/cart/cart.php','cart_display_totals',1,99);
 	Zotlabs\Extend\Hook::register('cart_mod_content','addon/cart/cart.php','cart_mod_content',1,99);
+	Zotlabs\Extend\Hook::register('cart_post_add_item','addon/cart/cart.php','cart_post_add_item');
 }
 
 function cart_unload(){
@@ -1025,6 +1065,7 @@ function cart_unload(){
 	Zotlabs\Extend\Hook::unregister('cart_calc_totals','addon/cart/cart.php','cart_calc_totals',1,10);
 	Zotlabs\Extend\Hook::unregister('cart_display_after','addon/cart/cart.php','cart_display_totals',1,99);
 	Zotlabs\Extend\Hook::unregister('cart_mod_content','addon/cart/cart.php','cart_mod_content',1,99);
+	Zotlabs\Extend\Hook::unregister('cart_post_add_item','addon/cart/cart.php','cart_post_add_item');
 }
 
 function cart_module() { return; }
@@ -1182,18 +1223,22 @@ function cart_init() {
 }
 
 function cart_post_add_item () {
+	notice (t('Add Item') . EOL);
 	$items=Array();
+        // HERE!!!
+	Zotlabs\Extend\Hook::insert('cart_get_catalog','cart_get_test_catalog',1,0);
 	call_hooks('cart_get_catalog',$items);
 
 	$newitem = $items[$_POST["add"]];
+        $newitem["item_qty"]=1;
 	$hookdata=Array("content"=>'',"iteminfo"=>$newitem);
-	call_hook('cart_do_additem',$hookdata);
-	notice (t('Item Added') . EOL);
+	call_hooks('cart_do_additem',$hookdata);
 }
 	
 function cart_post(&$a) {
 	$cart_formname=preg_replace('/[^a-zA-Z0-9\_]/','',$_POST["cart_posthook"]);
 	$formhook = "cart_post_".$cart_formname;
+	notice (t('Add Item: ') . $formhook . EOL);
 	call_hooks($formhook);
 	$base_url = ( isset($_SERVER['HTTPS']) && $_SERVER['HTTPS']=='on' ? 'https' : 'http' ) . '://' .  $_SERVER['HTTP_HOST'];
 	$url = $base_url . $_SERVER["REQUEST_URI"];
@@ -1246,17 +1291,18 @@ function cart_pagecontent($a=null) {
 		$orderhash=argv(3);
 
 		if ($orderhash == '') {
-			$orderhash = cart_get_orderhash(false);
+			$orderhash = cart_getorderhash(false);
 		}
 
 		if (!$orderhash) {
-			notice ( t('Order not found.' . EOL);
+			notice ( t('Order not found.' . EOL));
 			return "<h1>Order Not Found</h1>";
 		}
 		
 		$cart_template = get_markup_template('basic_cart.tpl','addon/cart/');
 		call_hooks('cart_show_order_filter',$cart_template);
 		$order = cart_loadorder($orderhash);
+                logger("[cart] ORDER: ".print_r($order,true));
 		return replace_macros($cart_template, $order);
 	}
 		
@@ -1268,7 +1314,6 @@ function cart_pagecontent($a=null) {
 		$testcatalog = $testcatalog ? $testcatalog : 0;
 
 		if ($testcatalog) {
-			insert($hook, $fn, $version = 0, $priority = 0)
 			Zotlabs\Extend\Hook::insert('cart_get_catalog','cart_get_test_catalog',1,0);
 		}
 		call_hooks('cart_get_catalog',$items);
@@ -1284,7 +1329,6 @@ function cart_pagecontent($a=null) {
 
 	call_hooks('cart_mainmenu_filter',$menu);
 
-
     
 }
 
@@ -1292,7 +1336,7 @@ function cart_get_test_catalog (&$items) {
 
 	if (!is_array($items)) {$items = Array();}
 
-	return array_merge($items,Array (
+	$items= array_merge($items,Array (
 		"sku-1"=>Array("item_sku"=>"sku-1","item_desc"=>"Description Item 1","item_price"=>5.55),
 		"sku-2"=>Array("item_sku"=>"sku-2","item_desc"=>"Description Item 2","item_price"=>6.55),
 		"sku-3"=>Array("item_sku"=>"sku-3","item_desc"=>"Description Item 3","item_price"=>7.55),

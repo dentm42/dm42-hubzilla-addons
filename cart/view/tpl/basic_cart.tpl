@@ -1,70 +1,45 @@
 <h1>CART CONTENTS</h1>
 
-<div class="dm42cart catalog">
+<div class="dm42cart catalog" style="width:100%;">
   <div class='section-title-wrapper'>
     <div class="title">{{if $title}}{{$title}}{{else}}Order{{/if}}</div>
   </div>
-  <div class='section-content-wrapper'>
-    <form method="post">
-    <input type="hidden" name="cart_posthook" value="add_item">
-    <table>
+  <div class='section-content-wrapper' style="width:100%;">
+    <table style="width:100%;">
         <tr>
-            <th>Description</th>
-            <th>Price each {{if $currencysymbol}}({{$currencysymbol}}){{/if}}</th>
-            <th>Extended</th>
+            <th width=60%>Description</th>
+            <th width=20% style="text-align:right;">Price each {{if $currencysymbol}}({{$currencysymbol}}){{/if}}</th>
+            <th width=20% style="text-align:right;">Extended</th>
         </tr>
     {{foreach $items as $item}}
         <tr>
             <td>{{$item.item_desc}}</td>
-            <td>{{$item.item_price}}</td>
-            <td>{{$item.extended}}</td>
+            <td style="text-align:right;">{{$item.item_price}}</td>
+            <td style="text-align:right;">{{$item.extended}}</td>
         </tr>
     {{/foreach}}
     <tr>
         <td></td>
-        <td>Subtotal</td>
-        <td>{{$totals.Subtotal}}</td>
+        <th style="text-align:right;">Subtotal</th>
+        <td style="text-align:right;">{{$totals.Subtotal}}</td>
     </tr>
     <tr>
         <td></td>
-        <td>Tax Total</td>
-        <td>{{$totals.Tax}}</td>
+        <th style="text-align:right;">Tax Total</th>
+        <td style="text-align:right;">{{$totals.Tax}}</td>
     </tr>
     <tr>
         <td></td>
-        <td>Order Total</td>
-        <td>{{$totals.OrderTotal}}</td>
+        <th style="text-align:right;">Order Total</th>
+        <td style="text-align:right;">{{$totals.OrderTotal}}</td>
     </tr>
     {{if $totals.Payment}}
     <tr>
         <td></td>
-        <td>Payment</td>
-        <td>{{$totals.Payment}}</td>
+        <th>Payment</th>
+        <td style="text-align:right;">{{$totals.Payment}}</td>
     </tr>
     {{/if}}
     </table>
-    </form>
   </div>
 </div>
-
-
-
-
-
-    <table>
-        <tr>
-            <th></th>
-            <th>Description</th>
-            <th>Price each {{if $currencysymbol}}({{$currencysymbol}}){{/if}}</th>
-        </tr>
-    {{foreach $items as $item}}
-    {{$itemtotal = $items.item_qty * $items.item_price}}
-    {{$itemtax = $itemtotal * $items.item_tax_rate}}
-        <tr>
-            <td><button class="btn btn-primary" type="submit" name="add" id="newchannel-submit-button" value="{{$item.item_sku}}">Add</button></td>
-            <td>{{$item.item_desc}}</td>
-            <td>{{$item.item_price}}</td>
-        </tr>
-    {{/foreach}}
-    </table>
-
