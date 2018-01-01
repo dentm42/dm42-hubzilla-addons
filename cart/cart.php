@@ -164,9 +164,10 @@ function cart_loadorder ($orderhash) {
 
 	$order = $r[0];
 	$order["order_meta"]=cart_maybeunjson($order["order_meta"]);
+	$order["totals"]=$order["order_meta"]["totals"];
 	
 	$r = q ("select * from cart_orderitems where order_hash = '%s'",dbesc($orderhash));
-        logger ("[cart] Cart Has No Items orderhash = ".$orderhash);
+
 	if (!$r) {
                 logger ("[cart] Cart Has No Items");
 		return Array("order"=>$order,"items"=>null);
@@ -175,18 +176,10 @@ function cart_loadorder ($orderhash) {
 	foreach ($r as $key=>$iteminfo) {
 		$items[$key]=$iteminfo;
 		$items[$key]["extended"]=$iteminfo["item_qty"]*$iteminfo["item_price"];
-		$items[$key]["itemtax"]=0;
-                $ordertaxtotal=$ordertaxtotal + $items[$key]["itemtax"];
-                $ordersubtotal=$ordersubtotal + $items[$key]["extended"];
 	}
-        $ordertotal=$ordertaxtotal + $ordersubtotal;
 	$order["items"]=$items;
-        $order["totals"]["Subtotal"]=$ordersubtotal;
-        $order["totals"]["Tax"]=$ordersubtotal;
-        $order["totals"]["OrderTotal"]=$ordertotal;
-        $hookdata=$order;
-	call_hooks("cart_calc_totals",$hookdata);
-        logger ("[cart] cart_loadorder order: ".print_r($hookdata,true));
+    $hookdata=$order;
+	call_hooks("cart_loadorder",$hookdata);
 	return $hookdata;
 }
 
@@ -630,6 +623,7 @@ function cart_calc_totals(&$hookdata) {
 	$orderhash=isset($hookdata["order"]["order_hash"]) ? $hookdata["order"]["order_hash"] : null;
 	if (!$order_hash) {return;}
 	$order=cart_loadorder($orderhash);
+	if ($order["checkedout"]!=null) { return; }
 	$ordermeta=$order["order_meta"];
 	$items=$order["items"];
 	$subtotal=0;
@@ -645,25 +639,12 @@ function cart_calc_totals(&$hookdata) {
 		$taxtotal = $taxtotal + $linetax;
 	}
 	$ordertotal = $subtotal+$taxtotal;
-	$ordermeta["totals"]["Tax"]=sprintf("%01.2f",$taxtotal);;
-	$ordermeta["totals"]["Subtotal"]=sprintf("%01.2f",$subtotal);;
-	$ordermeta["totals"]["OrderTotal"]=sprintf("%01.2f",$ordertotal);
-	cart_update_ordermeta($ordermeta,$orderhash);
-	$hookdata["order"]["order_meta"]["totals"]=$ordermeta["totals"];
-}
-
-function cart_display_totals(&$hookdata) {
-	$orderhash=isset($hookdata["order"]["order_hash"]) ? $hookdata["order"]["order_hash"] : null;
-	$order=cart_loadorder($orderhash);
-	$ordermeta=$order["order_meta"];
-	$totals=$ordermeta["totals"];
-	$hookdata['content']=isset($hookdata['content']) ? $hookdata['content'] : '';
-	$hookdata['content'].= "<div class='totals'>";	
-	foreach ($totals as $totalname=>$total) {
-		$hookdata['content'] .= "<div class='totaldesc'>".t($totalname)."</div>";
-		$hookdata['content'] .= "<div class='total'>".$total." ".$order["order_currency"]."</div>";
-	}
-	$hookdata['content'].= "</div>";
+	$order["order_meta"]["totals"]["Tax"]=sprintf("%01.2f",$taxtotal);
+	$order["order_meta"]["totals"]["Subtotal"]=sprintf("%01.2f",$subtotal);
+	$order["order_meta"]["totals"]["OrderTotal"]=sprintf("%01.2f",$ordertotal);
+	call_hooks("cart_calc_totals",$order);
+	cart_update_ordermeta($order["order_meta"],$orderhash);
+	$hookdata["order"]["totals"]=$ordermeta["totals"];
 }
 
 function cart_do_display (&$hookdata) {
@@ -744,10 +725,10 @@ function cart_do_checkout_before (&$hookdata) {
 		return;
 	}
 	
-	$orderhash = isset($hookdata["order"]["order_hash"]) ? $hookdata["order"]["order_hash"] : cart_getorderhash();
+	$orderhash = isset($hookdata["order_hash"]) ? $hookdata["order_hash"] : cart_getorderhash();
 	$hookdata["error"]=null;
 	if (!$orderhash) {
-		$hookdata["errorcontent"][]="";
+		$hookdata["errorcontent"][]="<h1>Order Not Found</h1>";
 		$hookdata["error"][]="No active order";
 		return;
 	}
@@ -769,12 +750,12 @@ function cart_do_checkout_before (&$hookdata) {
 			continue;
 		}
 
-		$calldata = Array('item'=>$iteminfo,'error'=>null,'content'=>null);
+		$calldata = Array('itemid'=>$iteminfo,'error'=>null,'content'=$hookdata["content"]);
 
 		if ($itemtype) {
 			$itemtypehook='cart_before_checkout_'.$itemtype;
 			call_hooks($itemtypehook,$calldata);
-			$hookdata["content"] .= isset($calldata["content"]) ? $calldata["content"] : '';
+			$hookdata["content"] = isset($calldata["content"]) ? $calldata["content"] : '';
 			unset($calldata["content"]);
 			if (isset($calldata["error"]) && $calldata["error"]!=null) {
 				$hookdata["content"]=$startcontent;
@@ -786,11 +767,11 @@ function cart_do_checkout_before (&$hookdata) {
 	}
 
 	if (!$error) {
+		$order=cart_loadorder($orderhash);
 		unset($calldata);
-		$calldata=Array('order'=>$order,"error"=>null,"content"=>null);
+		$calldata = Array('order_hash'=>$orderhash,'error'=>null);
 		call_hooks('cart_before_checkout',$calldata);
-		$hookdata["content"].=isset($calldata["content"]) ? $calldata["content"] : '';
-		unset($calldata["content"]);
+		$hookdata["content"]=isset($calldata["content"]) ? $calldata["content"] : '';
 		if (isset($calldata["error"]) && $calldata["error"]!=null) {
 			$hookdata["content"]=$startcontent;
 			$hookdata["errorcontent"][]=isset($calldata["errorcontent"]) ? $calldata["errorcontent"] : null;
@@ -806,7 +787,7 @@ function cart_do_checkout (&$hookdata) {
 		return;
 	}
 	
-	$orderhash = isset($hookdata["order"]["order_hash"]) ? $hookdata["order"]["order_hash"] : cart_getorderhash();
+	$orderhash = isset($hookdata["order_hash"]) ? $hookdata["order_hash"] : cart_getorderhash();
 	$hookdata["error"]=null;
 	if (!$orderhash) {
 		$hookdata["errorcontent"][]="";
@@ -827,10 +808,9 @@ function cart_do_checkout (&$hookdata) {
 	$startcontent=$hookdata["content"];
 
 	unset($calldata);
-	$calldata=Array('order'=>$order,"error"=>null,"content"=>null);
+	$calldata=Array('order_hash'=>$orderhash,"error"=>null,"content"=>$hookdata["content"]);
 	call_hooks('cart_checkout',$calldata);
-	$hookdata["content"].=isset($calldata["content"]) ? $calldata["content"] : '';
-	unset($calldata["content"]);
+	$hookdata["content"]=isset($calldata["content"]) ? $calldata["content"] : '';
 	if (isset($hookdata["error"]) && $hookdata["error"]!=null) {
 		$hookdata["content"]=$startcontent;
 		$hookdata["errorcontent"][]=isset($calldata["errorcontent"]) ? $calldata["errorcontent"] : null;
@@ -847,7 +827,7 @@ function cart_do_checkout_after (&$hookdata) {
 		return;
 	}
 
-	$orderhash = isset($hookdata["order"]["order_hash"]) ? $hookdata["order"]["order_hash"] : cart_getorderhash();
+	$orderhash = isset($hookdata["order_hash"]) ? $hookdata["order_hash"] : cart_getorderhash();
 	$hookdata["error"]=null;
 	if (!$orderhash) {
 		$hookdata["errorcontent"][]="";
@@ -858,13 +838,6 @@ function cart_do_checkout_after (&$hookdata) {
 	$order=cart_loadorder($orderhash);
 	$error=null;
 
-	if ($order["order_checkedout"] != null) {
-		$hookdata["errorcontent"][]="";
-		$hookdata["error"][]="Order previously checked out";
-		logger ('[cart] Attempt to check out already checked out cart (order id:'.$order["id"].')');
-		return;
-	}
-
 	$startcontent=$hookdata["content"];
 
 	foreach ($order["items"] as $iteminfo) {	
@@ -872,12 +845,12 @@ function cart_do_checkout_after (&$hookdata) {
 		if ($itemtype && !array_has_key($cart_itemtypes,$iteminfo['item_type'])) {
 			continue;
 		}
-		$calldata = Array('item'=>$iteminfo,'content'=>null);
+		$calldata = Array('item'=>$iteminfo,'content'=>$hookdata["content"]);
 		$itemtype = isset($calldata['item']['item_type']) ? $calldata['item']['item_type'] : null;
 		if ($itemtype) {
 			$itemtypehook='cart_after_checkout_'.$itemtype;
 			call_hooks($itemtypehook,$calldata);
-			$hookdata["content"].=isset($calldata["content"]) ? $calldata["content"] : '';
+			$hookdata["content"]=isset($calldata["content"]) ? $calldata["content"] : '';
 			unset($calldata["content"]);
 			if (isset($calldata["error"]) && $calldata["error"]!=null) {
 				$hookdata["content"]=$startcontent;
@@ -889,9 +862,9 @@ function cart_do_checkout_after (&$hookdata) {
 		unset($calldata);
 	}
 	
-	$calldata=Array('order'=>$order,"content"=>null);
+	$calldata=Array('order_hash'=>$orderhash,"content"=>$hookdata["content"]);
 	call_hooks('cart_after_checkout',$calldata);
-	$data["content"].=isset($calldata["content"]) ? $calldata["content"] : '';
+	$data["content"]=isset($calldata["content"]) ? $calldata["content"] : '';
 	unset($calldata["content"]);
 	if (isset($calldata["error"]) && $calldata["error"]!=null) {
 		$hookdata["content"]=$startcontent;
@@ -1179,6 +1152,13 @@ function cart_settings(&$s) {
 							 '',array(t('No'),t('Yes')))));
 
         }
+        /*
+         * @todo: Set payment options order
+         * @todo: Enable/Disable payment options
+         * $paymentopts = Array();
+         * call_hooks('cart_paymentopts',$paymentopts);
+         * @todo: Configuure payment options
+         */ 
 
 	$s .= replace_macros(get_markup_template('generic_addon_settings.tpl'), array(
 				     '$addon' 	=> array('cart',
@@ -1292,6 +1272,7 @@ function cart_pagecontent($a=null) {
 
 		if ($orderhash == '') {
 			$orderhash = cart_getorderhash(false);
+			$_SESSION["cart_order_hash"] = $orderhash;
 		}
 
 		if (!$orderhash) {
@@ -1302,7 +1283,6 @@ function cart_pagecontent($a=null) {
 		$cart_template = get_markup_template('basic_cart.tpl','addon/cart/');
 		call_hooks('cart_show_order_filter',$cart_template);
 		$order = cart_loadorder($orderhash);
-                logger("[cart] ORDER: ".print_r($order,true));
 		return replace_macros($cart_template, $order);
 	}
 		
@@ -1325,11 +1305,109 @@ function cart_pagecontent($a=null) {
 		return replace_macros($template, array('$items'	=> $items ));
 	}
 
-	$menu = Array();
+	if ((argc() >= 3) && (argv(2) == 'checkout') {
+		if (argc() == 3) {
+			goaway(z_root() . '/cart/' . $nick . '/checkout/start');
+		}
+		$orderhash = cart_getorderhash(false);
 
-	call_hooks('cart_mainmenu_filter',$menu);
+		if (!orderhash) {
+			return "<h1>".t("No Order Found")."</h1>";
+		}
+		
+		$order = cart_loadorder($orderhash);
 
-    
+		$hookname='cart_checkout_'.argv(3);
+		$order["checkoutdisplay"]='';
+		call_hooks($hookname,$order);
+
+		if ($order["checkoutdisplay"]=='') {
+			return "<h1>".t("An unknown error has occurred.")."</h1>";
+		}
+
+	}
+
+	$menu = '';
+
+	$templatevalues = Array("menu"=>$menu);
+	call_hooks('cart_mainmenu_filter',$templatevalues);
+	
+    $template = get_markup_template('menu.tpl','addon/cart/');
+	return replace_macros($template, $templatevalues);
+
+}
+
+function cart_checkout_start (&$hookdata) {
+
+	$display = $hookdata["checkoutdisplay"];
+	do_checkout_before($hookdata);
+	
+	$manualpayments = get_pconfig(local_channel(),'cart','enable_manual_payments');
+	$manualpayments = isset($manualpayments) ? $manualpayments : false;
+	if ($manualpayments) {
+		Zotlabs\Extend\Hook::insert('cart_paymentopts','cart_manual_paymentopt',1,0);
+	}
+	$paymentopts = Array();
+	call_hooks('cart_paymentopts',$paymentopts);
+	/*
+	 * @todo: filter $paymentopts by "enabled" & properly configured payment options
+	 */
+	 
+	$hookdata["paymentopts"] = $paymentopts;
+	/*
+	 * Each element of the ["paymentopts"] array is expected to have the following structure:
+	 * ["{paymenttypeslug}"] => Array (
+	 *                          "Name" => {name of payment type}
+	 * 							"Description" => {Description of payment type}
+	 * 							"html" => {html to present - (link to ../checkout/confirm/paymenttypeslug)}
+	 * 							)
+	 * NOTE: Slugs can only contain the characters A-Za-z0-9_-
+	 */
+
+    $template = get_markup_template('basic_checkout_start.tpl','addon/cart/');
+	$display = replace_macros($template, $hookdata);
+	
+	$hookdata["checkoutdisplay"] = $display;
+	call_hooks ('cart_checkout_start',$hookdata);
+	return $hookdata["checkoutdisplay"];
+}
+
+function cart_checkout_confirm (&$hookdata) {
+	$paymenttype=null;
+	
+	if ((argc() >= 4) && (argv(3) == 'confirm') {
+		$paymenttype=preg_replace('/[^a-zA-Z0-9\_\-]/',argv(4));
+	}
+
+	$paymentopts = Array();
+	call_hooks('cart_paymentopts',$paymentopts);
+
+    if (!isset($paymentopts[$paymenttype])) {
+		notice (t('Payment type '.$paymenttype.' is invalid.') . EOL );
+		goaway(z_root() . '/cart/' . $nick . '/checkout/start');
+	}
+
+	cart_do_checkout ($hookdata);
+
+	call_hooks('cart_checkout',$order);
+	
+	return $hookdata["content"];
+
+}
+
+function cart_checkout_complete (&$hookdata) {
+
+	$paymenttype=null;
+
+	cart_do_after_checkout ($hookdata);
+
+	call_hooks('cart_checkout_complete',$order);
+
+    $template = get_markup_template('basic_checkout_complete.tpl','addon/cart/');
+	$display = replace_macros($template, $hookdata);
+	$hookdata["checkoutdisplay"] = $display;
+	return $hookdata["checkoutdisplay"];
+	
 }
 
 function cart_get_test_catalog (&$items) {
