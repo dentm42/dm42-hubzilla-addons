@@ -750,7 +750,7 @@ function cart_do_checkout_before (&$hookdata) {
 			continue;
 		}
 
-		$calldata = Array('itemid'=>$iteminfo,'error'=>null,'content'=$hookdata["content"]);
+		$calldata = Array('itemid'=>$iteminfo,'error'=>null,'content'=>$hookdata["content"]);
 
 		if ($itemtype) {
 			$itemtypehook='cart_before_checkout_'.$itemtype;
@@ -1305,7 +1305,7 @@ function cart_pagecontent($a=null) {
 		return replace_macros($template, array('$items'	=> $items ));
 	}
 
-	if ((argc() >= 3) && (argv(2) == 'checkout') {
+	if ((argc() >= 3) && (argv(2) == 'checkout')) {
 		if (argc() == 3) {
 			goaway(z_root() . '/cart/' . $nick . '/checkout/start');
 		}
@@ -1332,7 +1332,7 @@ function cart_pagecontent($a=null) {
 	$templatevalues = Array("menu"=>$menu);
 	call_hooks('cart_mainmenu_filter',$templatevalues);
 	
-    $template = get_markup_template('menu.tpl','addon/cart/');
+        $template = get_markup_template('menu.tpl','addon/cart/');
 	return replace_macros($template, $templatevalues);
 
 }
@@ -1375,7 +1375,7 @@ function cart_checkout_start (&$hookdata) {
 function cart_checkout_confirm (&$hookdata) {
 	$paymenttype=null;
 	
-	if ((argc() >= 4) && (argv(3) == 'confirm') {
+	if ((argc() >= 4) && (argv(3) == 'confirm')) {
 		$paymenttype=preg_replace('/[^a-zA-Z0-9\_\-]/',argv(4));
 	}
 
