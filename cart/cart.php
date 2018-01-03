@@ -1291,10 +1291,8 @@ function cart_post_manual_checkout_confirm () {
 
 	$order = cart_loadorder($orderhash);
 	cart_do_checkout ($order);
+	cart_do_checkout_after ($order);
 
-	if (isset($order["error"])) {
-		goaway(z_root() . '/cart/' . $nick . '/checkout/' . $order["error_page"]);
-	}
 }
 
 function cart_checkout_manual (&$hookdata) {
@@ -1305,9 +1303,6 @@ function cart_checkout_manual (&$hookdata) {
 		notice (t('Manual payments are not enabled.') . EOL );
 		goaway(z_root() . '/cart/' . $nick . '/checkout/start');		
 	}
-
-	cart_do_checkout ($hookdata);
-	cart_do_checkout_after ($hookdata);
 
     $template = get_markup_template('basic_checkout_manual_confirm.tpl','addon/cart/');
 	$display = replace_macros($template, $hookdata);
