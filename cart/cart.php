@@ -695,10 +695,6 @@ function cart_do_display (&$hookdata) {
 	$hookdata["content"].= $calldata["content"];
 }
 
-function cart_processor_manual (&$hookdata) {
-	
-}
-
 function cart_checkout_hook(&$hookdata) {
 	$orderhash = isset($data["order_hash"]) ? $data["order_hash"] : null;
 	
@@ -783,95 +779,52 @@ function cart_do_checkout_before (&$hookdata) {
 
 function cart_do_checkout (&$hookdata) {
 
-	if (isset($hookdata["error"]) && $hookdata["error"]!=null) {
-		return;
-	}
-	
 	$orderhash = isset($hookdata["order_hash"]) ? $hookdata["order_hash"] : cart_getorderhash();
-	$hookdata["error"]=null;
+
 	if (!$orderhash) {
-		$hookdata["errorcontent"][]="";
-		$hookdata["error"][]="No active order";
 		return;
 	}
 
 	$order=cart_loadorder($orderhash);
-	$error=null;
+
 
 	if ($order["order_checkedout"] != null) {
-		$hookdata["errorcontent"][]="";
-		$hookdata["error"][]="Order previously checked out";
+		notice ( t('Order cannot be checked out.') . EOL );
 		logger ('[cart] Attempt to check out already checked out cart (order id:'.$order["id"].')');
 		return;
 	}
 
-	$startcontent=$hookdata["content"];
-
 	unset($calldata);
-	$calldata=Array('order_hash'=>$orderhash,"error"=>null,"content"=>$hookdata["content"]);
+	$calldata=Array('order_hash'=>$orderhash);
 	call_hooks('cart_checkout',$calldata);
-	$hookdata["content"]=isset($calldata["content"]) ? $calldata["content"] : '';
-	if (isset($hookdata["error"]) && $hookdata["error"]!=null) {
-		$hookdata["content"]=$startcontent;
-		$hookdata["errorcontent"][]=isset($calldata["errorcontent"]) ? $calldata["errorcontent"] : null;
-		$hookdata["error"][]=$calldata["error"];
-		return;
-	}
-
 	return;
 }
 
 function cart_do_checkout_after (&$hookdata) {
 
-	if (isset($hookdata["error"]) && $hookdata["error"]!=null) {
-		return;
-	}
-
 	$orderhash = isset($hookdata["order_hash"]) ? $hookdata["order_hash"] : cart_getorderhash();
-	$hookdata["error"]=null;
 	if (!$orderhash) {
-		$hookdata["errorcontent"][]="";
-		$hookdata["error"][]="No active order";
 		return;
 	}
 
 	$order=cart_loadorder($orderhash);
-	$error=null;
-
-	$startcontent=$hookdata["content"];
 
 	foreach ($order["items"] as $iteminfo) {	
 		$itemtype = isset($iteminfo["item_type"]) ? $iteminfo["item_type"] : null;
 		if ($itemtype && !array_has_key($cart_itemtypes,$iteminfo['item_type'])) {
 			continue;
 		}
-		$calldata = Array('item'=>$iteminfo,'content'=>$hookdata["content"]);
+		$calldata = Array('item'=>$iteminfo);
 		$itemtype = isset($calldata['item']['item_type']) ? $calldata['item']['item_type'] : null;
 		if ($itemtype) {
 			$itemtypehook='cart_after_checkout_'.$itemtype;
 			call_hooks($itemtypehook,$calldata);
-			$hookdata["content"]=isset($calldata["content"]) ? $calldata["content"] : '';
-			unset($calldata["content"]);
-			if (isset($calldata["error"]) && $calldata["error"]!=null) {
-				$hookdata["content"]=$startcontent;
-				$hookdata["errorcontent"][]=isset($calldata["errorcontent"]) ? $calldata["errorcontent"] : null;
-				$hookdata["error"][]=$calldata["error"];
-				return;
-			}
 		}
 		unset($calldata);
 	}
 	
-	$calldata=Array('order_hash'=>$orderhash,"content"=>$hookdata["content"]);
+	$calldata=Array('order_hash'=>$orderhash);
 	call_hooks('cart_after_checkout',$calldata);
-	$data["content"]=isset($calldata["content"]) ? $calldata["content"] : '';
-	unset($calldata["content"]);
-	if (isset($calldata["error"]) && $calldata["error"]!=null) {
-		$hookdata["content"]=$startcontent;
-		$hookdata["errorcontent"][]=isset($calldata["errorcontent"]) ? $calldata["errorcontent"] : null;
-		$hookdata["error"][]=$calldata["error"];
-		return;
-	}
 
 	return;
 }
@@ -1020,6 +973,7 @@ function cart_load(){
 	Zotlabs\Extend\Hook::register('cart_display_after','addon/cart/cart.php','cart_display_totals',1,99);
 	Zotlabs\Extend\Hook::register('cart_mod_content','addon/cart/cart.php','cart_mod_content',1,99);
 	Zotlabs\Extend\Hook::register('cart_post_add_item','addon/cart/cart.php','cart_post_add_item');
+	Zotlabs\Extend\Hook::register('cart_paymentopts','addon/cart/cart.php','cart_paymentopts_register_manual');
 }
 
 function cart_unload(){
@@ -1039,66 +993,10 @@ function cart_unload(){
 	Zotlabs\Extend\Hook::unregister('cart_display_after','addon/cart/cart.php','cart_display_totals',1,99);
 	Zotlabs\Extend\Hook::unregister('cart_mod_content','addon/cart/cart.php','cart_mod_content',1,99);
 	Zotlabs\Extend\Hook::unregister('cart_post_add_item','addon/cart/cart.php','cart_post_add_item');
+	Zotlabs\Extend\Hook::unregister('cart_paymentopts','addon/cart/cart.php','cart_paymentopts_register_manual');
 }
 
 function cart_module() { return; }
-
-/*
- *
- *  CALLABLE HOOKS:
- **		cart_do_additem   @param Array("iteminfo"=>{itemarray},"content"=>$c)
- **		cart_do_updateitem @param Array("iteminfo"=>{itemarray},"content"=>$c)
- *		cart_do_checkout @param $content
- *      cart_processor_register  @param:  Array ("uniqueslug"=>"payprocessor_hookname")
- * 		cart_itemtype_register   @param:  Array ("uniqueslug"=>Array{meta parameters})
- * 
- *  CALLED HOOKS:
- *		cart_post_{formhandle} (&$c)  ($c=returned content)
- ***	cart_display_before (Array("orderhash"=>$orderhash,"content"=>$c))
- ***	cart_display_after (Array("orderhash"=>$orderhash,"content"=>$c))
- ***    cart_display_item (Array("item"=>$iteminfo_array,"content"=>$c))
- ***	cart_display_before_{itemtype} (Array("item"=>$iteminfo_array,"content"=>$c))
- ***	cart_display_after_{itemtype} (Array("item"=>$iteminfo_array,"content"=>$c))
- **		cart_do_display (Array("orderhash"=>$orderhash,"content"=>$c))
- ***	cart_order_before_additem (Array("order"=>{order array},"item"=>{newitem array},"error"=>null))
- ***	cart_order_before_additem_{itemtype} (Array("order"=>{order array},"item"=>{newitem array},"error"=>null))
- *	            each hook handler should simply return if ["error"] != null
- ***	cart_order_additem (Array("order"=>{order array},"item"=>{newitem array}))
- ***	cart_order_additem_{itemtype} (Array("order"=>{order array},"item"=>{newitem array}))
- ***	cart_order_after_additem (Array("order"=>{order array},"item"=>{newitem array}))
- ***	cart_order_after_additem_{itemtype} (Array("order"=>{order array},"item"=>{newitem array}))
- ***	cart_order_before_updateitem (Array("order"=>{order array},"item"=>{updated item array},"error"=>null))
- ***	cart_order_before_updateitem_{itemtype} (Array("order"=>{order array},"item"=>{updated item array},"error"=>null))
- *			     each hook handler should simply return if ["error"] != null
- ***	cart_order_updateitem (Array("order"=>{order array},"item"=>{updated item array}))
- ***	cart_order_updateitem_{itemtype} (Array("order"=>{order array},"item"=>{updated item array}))
- ***	cart_order_after_updateitem (Array("order"=>{order array},"item"=>{updated item array}))
- ***	cart_order_after_updateitem_{itemtype} (Array("order"=>{order array},"item"=>{updated item array}))
- * 
- ***    cart_before_checkout (Array("order"=>{order array},"error"=>null,"formcontent"=>null))
- ***	cart_before_checkout_{itemtype} (Array("item"=>{item array},"error"=>null,"formcontent"=>null))
- *              each hook handler should simply return if ["error"] != null
- * 				forms can be returned in ["formcontent"]
- * 				each returned form should have a hidden value "cart_formhandle"
- * 				which is handled by a hook cart_post_{formhandle}
- ***    cart_checkout ({order array})
- ***    cart_after_checkout ({order array})
- ***	cart_after_checkout_{itemtype} ({item array})
- ***	cart_orderpaid ({order array})
- ***	cart_orderpaid_{itemtype} ({item array})
- * 		cart_fulfill_item ({item array})
- * 		cart_fulfill_item_{itemtype} ({item array})
- ***    cart_get_catalog ({items array})
- ***    cart_filter_catalog ({items array})
- ***    cart_aside_filter ({aside_content})
- ***    cart_mainmenu_filter ({menu array})
- *                   ["order"]=sort order
- *                   ["heading"]=heading to display item under
- * 					 ["text"]=Menu item text
- *                   ["URL"]=URL to link to
- *		
- *
- */
 
 function cart_settings_post(&$a,&$s) {
 	if(! local_channel())
@@ -1114,6 +1012,7 @@ function cart_settings_post(&$a,&$s) {
 	set_pconfig( local_channel(), 'cart', 'enable_manual_payments', $_POST['enable_manual_payments'] );
 
 }
+
 function cart_plugin_admin_post(&$a,&$s) {
 /*
 	if(! local_channel())
@@ -1168,6 +1067,7 @@ function cart_settings(&$s) {
         //return $s;
 
 }
+
 function cart_plugin_admin(&$a,&$s) {
 /*
 
@@ -1180,8 +1080,7 @@ function cart_plugin_admin(&$a,&$s) {
 
 }
 
-function cart_init() {
-    // Determine which channel's cart to display to the observer
+function cart_getnick () {
     $nick = null;
     if (argc() > 1)
         $nick = argv(1); // if the channel name is in the URL, use that
@@ -1197,6 +1096,13 @@ function cart_init() {
         notice( t('Profile Unavailable.') . EOL);
         goaway(z_root());
     }
+
+    return $nick;
+
+}
+
+function cart_init() {
+    $nick = cart_getnick();
 
     profile_load($nick);
 
@@ -1218,7 +1124,6 @@ function cart_post_add_item () {
 function cart_post(&$a) {
 	$cart_formname=preg_replace('/[^a-zA-Z0-9\_]/','',$_POST["cart_posthook"]);
 	$formhook = "cart_post_".$cart_formname;
-	notice (t('Add Item: ') . $formhook . EOL);
 	call_hooks($formhook);
 	$base_url = ( isset($_SERVER['HTTPS']) && $_SERVER['HTTPS']=='on' ? 'https' : 'http' ) . '://' .  $_SERVER['HTTP_HOST'];
 	$url = $base_url . $_SERVER["REQUEST_URI"];
@@ -1322,9 +1227,10 @@ function cart_pagecontent($a=null) {
 		call_hooks($hookname,$order);
 
 		if ($order["checkoutdisplay"]=='') {
-			return "<h1>".t("An unknown error has occurred.")."</h1>";
+			notice(t("An unknown error has occurred Please start again.") . EOL );
+			goaway(z_root() . '/cart/' . $nick . '/checkout/start');
 		}
-
+		return $order["checkoutdisplay"];
 	}
 
 	$menu = '';
@@ -1332,7 +1238,7 @@ function cart_pagecontent($a=null) {
 	$templatevalues = Array("menu"=>$menu);
 	call_hooks('cart_mainmenu_filter',$templatevalues);
 	
-        $template = get_markup_template('menu.tpl','addon/cart/');
+    $template = get_markup_template('menu.tpl','addon/cart/');
 	return replace_macros($template, $templatevalues);
 
 }
@@ -1372,42 +1278,50 @@ function cart_checkout_start (&$hookdata) {
 	return $hookdata["checkoutdisplay"];
 }
 
-function cart_checkout_confirm (&$hookdata) {
-	$paymenttype=null;
+function cart_post_manual_checkout_confirm () {
+
+	$nick = cart_getnick();
 	
-	if ((argc() >= 4) && (argv(3) == 'confirm')) {
-		$paymenttype=preg_replace('/[^a-zA-Z0-9\_\-]/',argv(4));
+	$orderhash = cart_getorderhash(false);
+	
+    if ($_POST["orderhash"] != $orderhash) {
+        notice (t('Error: order mismatch. Please try again.') . EOL );
+        goaway(z_root() . '/cart/' . $nick . '/checkout/start');
 	}
 
-	$paymentopts = Array();
-	call_hooks('cart_paymentopts',$paymentopts);
+	$order = cart_loadorder($orderhash);
+	cart_do_checkout ($order);
 
-    if (!isset($paymentopts[$paymenttype])) {
-		notice (t('Payment type '.$paymenttype.' is invalid.') . EOL );
-		goaway(z_root() . '/cart/' . $nick . '/checkout/start');
+	if (isset($order["error"])) {
+		goaway(z_root() . '/cart/' . $nick . '/checkout/' . $order["error_page"]);
+	}
+}
+
+function cart_checkout_manual (&$hookdata) {
+	
+	$manualpayments = get_pconfig(local_channel(),'cart','enable_manual_payments');
+	$manualpayments = isset($manualpayments) ? $manualpayments : false;
+	if (!$manualpayments) {
+		notice (t('Manual payments are not enabled.') . EOL );
+		goaway(z_root() . '/cart/' . $nick . '/checkout/start');		
 	}
 
 	cart_do_checkout ($hookdata);
+	cart_do_checkout_after ($hookdata);
 
-	call_hooks('cart_checkout',$order);
+    $template = get_markup_template('basic_checkout_manual_confirm.tpl','addon/cart/');
+	$display = replace_macros($template, $hookdata);
 	
-	return $hookdata["content"];
-
+	$hookdata["checkoutdisplay"] = $display;
 }
 
-function cart_checkout_complete (&$hookdata) {
-
-	$paymenttype=null;
-
-	cart_do_after_checkout ($hookdata);
-
-	call_hooks('cart_checkout_complete',$order);
-
-    $template = get_markup_template('basic_checkout_complete.tpl','addon/cart/');
-	$display = replace_macros($template, $hookdata);
-	$hookdata["checkoutdisplay"] = $display;
-	return $hookdata["checkoutdisplay"];
-	
+function cart_paymentopts_register_manual (&$hookdata) {
+	$manualpayments = get_pconfig(local_channel(),'cart','enable_manual_payments');
+	$manualpayments = isset($manualpayments) ? $manualpayments : false;
+	if ($manualpayments) {
+		$hookdata["manual"]="manual";
+	}
+    return;
 }
 
 function cart_get_test_catalog (&$items) {
