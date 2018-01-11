@@ -24,6 +24,11 @@
 
 $cart_version = 0.5;
 load_config("cart");
+$cart_manualpayments = get_pconfig ($id,'cart','enable_manual_payments');
+if ($cart_manualpayments) {
+	require_once("./manual_payments.php");
+}
+
 
 function cart_maybeunjson ($value) {
 
@@ -973,7 +978,12 @@ function cart_load(){
 	Zotlabs\Extend\Hook::register('cart_display_after','addon/cart/cart.php','cart_display_totals',1,99);
 	Zotlabs\Extend\Hook::register('cart_mod_content','addon/cart/cart.php','cart_mod_content',1,99);
 	Zotlabs\Extend\Hook::register('cart_post_add_item','addon/cart/cart.php','cart_post_add_item');
-	Zotlabs\Extend\Hook::register('cart_paymentopts','addon/cart/cart.php','cart_paymentopts_register_manual');
+
+	$manualpayments = get_pconfig ($id,'cart','enable_manual_payments');
+
+	if ($manualpayments) {
+		cart_manualpayments_load();
+	}
 }
 
 function cart_unload(){
@@ -993,7 +1003,8 @@ function cart_unload(){
 	Zotlabs\Extend\Hook::unregister('cart_display_after','addon/cart/cart.php','cart_display_totals',1,99);
 	Zotlabs\Extend\Hook::unregister('cart_mod_content','addon/cart/cart.php','cart_mod_content',1,99);
 	Zotlabs\Extend\Hook::unregister('cart_post_add_item','addon/cart/cart.php','cart_post_add_item');
-	Zotlabs\Extend\Hook::unregister('cart_paymentopts','addon/cart/cart.php','cart_paymentopts_register_manual');
+	require_once('./manual_payments.php');
+	cart_manualpayments_unload();
 }
 
 function cart_module() { return; }
@@ -1010,6 +1021,9 @@ function cart_settings_post(&$a,&$s) {
         }
 	set_pconfig( local_channel(), 'cart', 'enable_test_catalog', $_POST['enable_test_catalog'] );
 	set_pconfig( local_channel(), 'cart', 'enable_manual_payments', $_POST['enable_manual_payments'] );
+
+	cart_unload();
+	cart_load();
 
 }
 
@@ -1250,9 +1264,7 @@ function cart_checkout_start (&$hookdata) {
 	
 	$manualpayments = get_pconfig(local_channel(),'cart','enable_manual_payments');
 	$manualpayments = isset($manualpayments) ? $manualpayments : false;
-	if ($manualpayments) {
-		Zotlabs\Extend\Hook::insert('cart_paymentopts','cart_manual_paymentopt',1,0);
-	}
+
 	$paymentopts = Array();
 	call_hooks('cart_paymentopts',$paymentopts);
 	/*
@@ -1276,47 +1288,6 @@ function cart_checkout_start (&$hookdata) {
 	$hookdata["checkoutdisplay"] = $display;
 	call_hooks ('cart_checkout_start',$hookdata);
 	return $hookdata["checkoutdisplay"];
-}
-
-function cart_post_manual_checkout_confirm () {
-
-	$nick = cart_getnick();
-	
-	$orderhash = cart_getorderhash(false);
-	
-    if ($_POST["orderhash"] != $orderhash) {
-        notice (t('Error: order mismatch. Please try again.') . EOL );
-        goaway(z_root() . '/cart/' . $nick . '/checkout/start');
-	}
-
-	$order = cart_loadorder($orderhash);
-	cart_do_checkout ($order);
-	cart_do_checkout_after ($order);
-
-}
-
-function cart_checkout_manual (&$hookdata) {
-	
-	$manualpayments = get_pconfig(local_channel(),'cart','enable_manual_payments');
-	$manualpayments = isset($manualpayments) ? $manualpayments : false;
-	if (!$manualpayments) {
-		notice (t('Manual payments are not enabled.') . EOL );
-		goaway(z_root() . '/cart/' . $nick . '/checkout/start');		
-	}
-
-    $template = get_markup_template('basic_checkout_manual_confirm.tpl','addon/cart/');
-	$display = replace_macros($template, $hookdata);
-	
-	$hookdata["checkoutdisplay"] = $display;
-}
-
-function cart_paymentopts_register_manual (&$hookdata) {
-	$manualpayments = get_pconfig(local_channel(),'cart','enable_manual_payments');
-	$manualpayments = isset($manualpayments) ? $manualpayments : false;
-	if ($manualpayments) {
-		$hookdata["manual"]="manual";
-	}
-    return;
 }
 
 function cart_get_test_catalog (&$items) {
