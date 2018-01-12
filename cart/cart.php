@@ -13,7 +13,7 @@
  *    and payment processing capabilities to Hubzilla in a modular
  *    manner.  Each component (cart, fulfillment, payment) can be
  *    extended by additional addons using HOOKS
- * 
+ *
  */
 
  /* DEVNOTES
@@ -48,7 +48,7 @@ function cart_maybeunjson ($value) {
         return ($value);
     }
 }
-    
+
 function cart_maybejson ($value,$options=0) {
 
     if ($value!=null) {
@@ -86,7 +86,7 @@ function cart_dbCleanup () {
 			logger ('[cart] Error running dbCleanup. sql query: '.$query);
 			return UPDATE_FAILED;
 		}
-		
+
 	}
 	notice ('[cart] dbCleanup successful.');
 	logger ('[cart] dbCleanup successful.');
@@ -170,7 +170,7 @@ function cart_loadorder ($orderhash) {
 	$order = $r[0];
 	$order["order_meta"]=cart_maybeunjson($order["order_meta"]);
 	$order["totals"]=$order["order_meta"]["totals"];
-	
+
 	$r = q ("select * from cart_orderitems where order_hash = '%s'",dbesc($orderhash));
 
 	if (!$r) {
@@ -193,7 +193,7 @@ function cart_getorderhash ($create=false) {
 	$observerhash = get_observer_hash();
 	if ($observerhash === '') { $observerhash = null; }
 	$cartemail = isset($_SESSION["cart_email_addy"]) ? $_SESSION["cart_email_addy"] : null;
-	
+
 	if ($orderhash) {
                 logger ("orderhash in SESSION = ".$orderhash);
 		$r = q("select * from cart_orders where order_hash = '%s' limit 1",dbesc($orderhash));
@@ -241,12 +241,12 @@ function cart_getorderhash ($create=false) {
 		$orderhash=hash('whirlpool',microtime().$observerhash.$channel_hash);
 		q("insert into cart_orders (seller_channel,buyer_xchan,order_hash) values ('%s', '%s', '%s')",
 				dbesc($channel_hash),dbesc($observerhash),dbesc($orderhash));
-		
+
 		$_SESSION["cart_order_hash"]=$orderhash;
 	}
 
 	return $orderhash;
-	
+
 }
 
 function cart_additem_hook (&$hookdata) {
@@ -289,15 +289,15 @@ function cart_additem_hook (&$hookdata) {
 	}
 
 	$sql = "insert into cart_orderitems (".$colnames.") values (".$valuecasts.")";
-	array_unshift($params,$sql);	
+	array_unshift($params,$sql);
 	logger("[cart] insert item call q params: ".print_r($params,true));
 	$r=call_user_func_array('q', $params);
         logger('[cart] post insert r = '.print_r($r,true));
 }
-	
+
 //function cart_do_additem (array $iteminfo,&$c) {
 function cart_do_additem (&$hookdata) {
-	
+
         $startcontent = $hookdata["content"];
 	$iteminfo=$hookdata["iteminfo"];
 	$cart_itemtypes = cart_maybeunjson(get_pconfig("cart_itemtypes"));
@@ -313,7 +313,7 @@ function cart_do_additem (&$hookdata) {
 	$order=cart_loadorder(cart_getorderhash(true));
 
 	$itemtype = isset($iteminfo["item_type"]) ? $iteminfo["item_type"] : null;
-	
+
 	if ($itemtype && !array_has_key($cart_itemtypes,$iteminfo['item_type'])) {
 		unset ($iteminfo['item_type']);
 	}
@@ -334,7 +334,7 @@ function cart_do_additem (&$hookdata) {
 			return;
 		}
 	}
-	
+
 	if (!isset($calldata["item"])) { return; }
 	call_hooks('cart_order_before_additem',$calldata);
 
@@ -375,7 +375,7 @@ function cart_do_additem (&$hookdata) {
 		unset($calldata["error"]);
 		return;
 	}
-	
+
 	if ($itemtype) {
 		$itemtypehook='cart_order_after_additem_'.$itemtype;
 		call_hooks($itemtypehook,$calldata);
@@ -387,7 +387,7 @@ function cart_do_additem (&$hookdata) {
 			$hookdata["error"][]=$calldata["error"];
 			unset($calldata["error"]);
 		}
-	}		
+	}
 	call_hooks('cart_order_after_additem',$calldata);
 	$hookdata["content"] .= isset($calldata["content"]) ? $calldata["content"] : '';
 	unset($calldata["content"]);
@@ -401,7 +401,7 @@ function cart_do_additem (&$hookdata) {
 
 function cart_getorder_meta ($orderhash=null) {
 	$orderhash = $orderhash ? $orderhash : cart_getorderhash();
-	
+
 	if (!$orderhash) {
 		return null;
 	}
@@ -416,7 +416,7 @@ function cart_getorder_meta ($orderhash=null) {
 
 function cart_getitem_meta ($itemid,$orderhash=null) {
 	$orderhash = $orderhash ? $orderhash : cart_getorderhash();
-	
+
 	if (!$orderhash) {
 		return null;
 	}
@@ -431,13 +431,13 @@ function cart_getitem_meta ($itemid,$orderhash=null) {
 
 function cart_updateorder_meta ($meta,$orderhash=null) {
 	$orderhash = $orderhash ? $orderhash : cart_getorderhash();
-	
+
 	if (!$orderhash) {
 		return null;
 	}
 
 	$storemeta = cart_maybejson($meta);
-	
+
 	$r=q("update cart_order set order_meta = '%s' where order_hash = '%s'",
 			dbesc($storemeta),dbesc($orderhash),intval($itemid));
 
@@ -446,13 +446,13 @@ function cart_updateorder_meta ($meta,$orderhash=null) {
 
 function cart_updateitem_meta ($itemid,$meta,$orderhash=null) {
 	$orderhash = $orderhash ? $orderhash : cart_getorderhash();
-	
+
 	if (!$orderhash) {
 		return null;
 	}
 
 	$storemeta = cart_maybejson($meta);
-	
+
 	$r=q("update order_items set item_meta = '%s' where order_hash = '%s' and id = %d",
 			dbesc($storemeta),dbesc($orderhash),intval($itemid));
 
@@ -460,7 +460,7 @@ function cart_updateitem_meta ($itemid,$meta,$orderhash=null) {
 }
 
 function cart_updateitem_hook (&$hookdata) {
-	
+
 	$order=$hookdata["order"];
 	$item=$hookdata["item"];
 
@@ -469,7 +469,7 @@ function cart_updateitem_hook (&$hookdata) {
 	$decimal_components = Array ("item_price","item_tax_rate");
 	$bool_components = Array ("item_confirmed","item_fulfilled","item_exception");
 
-	
+
 	$params = Array();
 	$dodel=false;
 	if (isset($item["item_qty"]) && $item["item_qty"] == 0) {
@@ -554,9 +554,9 @@ function cart_do_updateitem (&$hookdata) {
 			return;
 		}
 	}
-	
+
 	if (!isset($calldata["item"])) { return; }
-	
+
 	call_hooks('cart_order_before_updateitem',$calldata);
 	$hookdata["content"].= isset($calldata["content"]) ? $calldata["content"] : '';
 	unset($calldata["content"]);
@@ -594,7 +594,7 @@ function cart_do_updateitem (&$hookdata) {
 			$hookdata["error"][]=$calldata["error"];
 			unset($calldata["error"]);
 	}
-	
+
 	if ($itemtype) {
 		$itemtypehook='cart_order_after_updateitem_'.$itemtype;
 		call_hooks($itemtypehook,$calldata);
@@ -606,7 +606,7 @@ function cart_do_updateitem (&$hookdata) {
 			$hookdata["error"][]=$calldata["error"];
 			unset($calldata["error"]);
 		}
-	}		
+	}
 	call_hooks('cart_order_after_updateitem',$calldata);
 	$hookdata["content"].= isset($calldata["content"]) ? $calldata["content"] : '';
 	unset($calldata["content"]);
@@ -621,7 +621,7 @@ function cart_do_updateitem (&$hookdata) {
 function cart_display_item (&$hookdata) {
 	$item = $hookdata["item"];
 	$hookdata["content"].=replace_macros(get_markup_template('cart_item_basic.tpl','addon/cart/'), array('$item'	=> $item ));
-	
+
 }
 
 function cart_calc_totals(&$hookdata) {
@@ -637,9 +637,9 @@ function cart_calc_totals(&$hookdata) {
 	foreach ($items as $key=>$item) {
 		$linetotal=$item["qty"]*$item["item_price"];
 		$hookdata["order"]["items"][$key]["extended"]=$linetotal;
-		
+
 		$linetax=$linetotal * $item["item_tax_rate"];
-		
+
 		$subtotal = $subtotal + $linetotal;
 		$taxtotal = $taxtotal + $linetax;
 	}
@@ -655,13 +655,13 @@ function cart_calc_totals(&$hookdata) {
 function cart_do_display (&$hookdata) {
 // *Note: No errors or error messages returned
 	$orderhash=$hookdata["order"]["order_hash"];
-	
+
 	$order=cart_loadorder($orderhash);
 	$calldata = Array("order"=>$order,"content"=>null);
 	call_hooks('cart_display_before',$calldata);
 	$hookdata["content"].= isset($calldata["content"]) ? $calldata["content"] : '';
 
-	foreach ($order["items"] as $iteminfo) {	
+	foreach ($order["items"] as $iteminfo) {
 		$itemtype = isset($iteminfo["item_type"]) ? $iteminfo["item_type"] : null;
 		if ($itemtype && !array_has_key($cart_itemtypes,$iteminfo['item_type'])) {
 			continue;
@@ -676,16 +676,16 @@ function cart_do_display (&$hookdata) {
 			$hookdata["content"].= isset($calldata["content"]) ? $calldata["content"] : '';
 			unset($calldata["content"]);
 		}
-		
+
 		$calldata["content"]=null;
-		
+
 		call_hooks("cart_display_item",$calldata);
 		$hookdata["content"].= isset($calldata["content"]) ? $calldata["content"] : '';
 		unset($calldata["content"]);
 		call_hooks("cart_display_item_after",$calldata);
 		$hookdata["content"].= isset($calldata["content"]) ? $calldata["content"] : '';
 		unset($calldata["content"]);
-		
+
 		if ($itemtype) {
 			$itemtypehook='cart_display_after_'.$itemtype;
 			$calldata["content"]=null;
@@ -702,7 +702,7 @@ function cart_do_display (&$hookdata) {
 
 function cart_checkout_hook(&$hookdata) {
 	$orderhash = isset($data["order_hash"]) ? $data["order_hash"] : null;
-	
+
 	if (!$orderhash) {
 		/*  No order given. */
 		return;
@@ -716,7 +716,7 @@ function cart_checkout_hook(&$hookdata) {
 	}
 
 	q("update cart_orders set `order_checkedout`=NOW() where `order_hash`='%s'",dbesc($orderhash));
-		
+
 	return;
 	}
 
@@ -725,7 +725,7 @@ function cart_do_checkout_before (&$hookdata) {
 	if (isset($hookdata["error"]) && $hookdata["error"]!=null) {
 		return;
 	}
-	
+
 	$orderhash = isset($hookdata["order_hash"]) ? $hookdata["order_hash"] : cart_getorderhash();
 	$hookdata["error"]=null;
 	if (!$orderhash) {
@@ -745,7 +745,7 @@ function cart_do_checkout_before (&$hookdata) {
 		return;
 	}
 
-	foreach ($order["items"] as $iteminfo) {	
+	foreach ($order["items"] as $iteminfo) {
 		$itemtype = isset($iteminfo["item_type"]) ? $iteminfo["item_type"] : null;
 		if ($itemtype && !array_has_key($cart_itemtypes,$iteminfo['item_type'])) {
 			continue;
@@ -814,7 +814,7 @@ function cart_do_checkout_after (&$hookdata) {
 
 	$order=cart_loadorder($orderhash);
 
-	foreach ($order["items"] as $iteminfo) {	
+	foreach ($order["items"] as $iteminfo) {
 		$itemtype = isset($iteminfo["item_type"]) ? $iteminfo["item_type"] : null;
 		if ($itemtype && !array_has_key($cart_itemtypes,$iteminfo['item_type'])) {
 			continue;
@@ -827,7 +827,7 @@ function cart_do_checkout_after (&$hookdata) {
 		}
 		unset($calldata);
 	}
-	
+
 	$calldata=Array('order_hash'=>$orderhash);
 	call_hooks('cart_after_checkout',$calldata);
 
@@ -848,7 +848,7 @@ function cart_do_orderpaid (&$hookdata) {
 	$orderhash=$hookdata["order"]["order_hash"];
 	$order=cart_loadorder($orderhash);
 	$startdata=isset($hookdata["content"]) ? $hookdata["content"] : null;
-	foreach ($order["items"] as $iteminfo) {	
+	foreach ($order["items"] as $iteminfo) {
 		$itemtype = isset($iteminfo["item_type"]) ? $iteminfo["item_type"] : null;
 		if ($itemtype && !array_has_key($cart_itemtypes,$iteminfo['item_type'])) {
 			continue;
@@ -887,7 +887,7 @@ function cart_checkver() {
 	if (cart_getsysconfig("appver") == $cart_version) {
 		return true;
 	}
-	
+
 	cart_setsysconfig("status","version-mismatch");
 	return false;
 }
@@ -944,7 +944,7 @@ function cart_install(&$a) {
 	cart_setsysconfig("status","ready");
 	cart_setsysconfig("dropTablesOnUninstall",0);
 }
-	
+
 function cart_uninstall() {
 	$dropTablesOnUninstall = intval(cart_getsysconfig("dropTablesOnUninstall"));
   	logger ('[cart] Uninstall start.',LOGGER_DEBUG);
@@ -953,7 +953,7 @@ function cart_uninstall() {
 		cart_dbCleanup ();
 	        cart_delsysconfig("dbver");
 	}
-	
+
 	cart_delsysconfig("appver");
 	notice ('[cart] Uninstalled.');
 	logger ('[cart] Uninstalled.',LOGGER_DEBUG);
@@ -1045,23 +1045,23 @@ function cart_settings(&$s) {
 
 	$enablecart = get_pconfig ($id,'cart','enable');
 	$sc = replace_macros(get_markup_template('field_checkbox.tpl'), array(
-				     '$field'	=> array('enable_cart', t('Enable Shopping Cart'), 
-							 (isset($enablecart) ? $enablecart : 0), 
+				     '$field'	=> array('enable_cart', t('Enable Shopping Cart'),
+							 (isset($enablecart) ? $enablecart : 0),
 							 '',array(t('No'),t('Yes')))));
 
         if (isset($enablecart)  && $enablecart == 1) {
 	    $testcatalog = get_pconfig ($id,'cart','enable_test_catalog');
 	    $sc .= replace_macros(get_markup_template('field_checkbox.tpl'), array(
-				     '$field'	=> array('enable_test_catalog', t('Enable Test Catalog'), 
-							 (isset($testcatalog) ? $testcatalog : 0), 
+				     '$field'	=> array('enable_test_catalog', t('Enable Test Catalog'),
+							 (isset($testcatalog) ? $testcatalog : 0),
 							 '',array(t('No'),t('Yes')))));
 
 
 	    $manualpayments = get_pconfig ($id,'cart','enable_manual_payments');
 
 	    $sc .= replace_macros(get_markup_template('field_checkbox.tpl'), array(
-				     '$field'	=> array('enable_manual_payments', t('Enable Manual Payments'), 
-							 (isset($manualpayments) ? $manualpayments : 0), 
+				     '$field'	=> array('enable_manual_payments', t('Enable Manual Payments'),
+							 (isset($manualpayments) ? $manualpayments : 0),
 							 '',array(t('No'),t('Yes')))));
 
         }
@@ -1071,11 +1071,11 @@ function cart_settings(&$s) {
          * $paymentopts = Array();
          * call_hooks('cart_paymentopts',$paymentopts);
          * @todo: Configuure payment options
-         */ 
+         */
 
 	$s .= replace_macros(get_markup_template('generic_addon_settings.tpl'), array(
 				     '$addon' 	=> array('cart',
-							 t('Base Cart Settings'), '', 
+							 t('Base Cart Settings'), '',
 							 t('Submit')),
 				     '$content'	=> $sc));
         //return $s;
@@ -1087,7 +1087,7 @@ function cart_plugin_admin(&$a,&$s) {
 
 	$s .= replace_macros(get_markup_template('generic_addon_settings.tpl'), array(
 				     '$addon' 	=> array('cart',
-							 t('Cart Settings'), '', 
+							 t('Cart Settings'), '',
 							 t('Submit')),
 				     '$content'	=> $sc));
 */
@@ -1134,7 +1134,7 @@ function cart_post_add_item () {
 	$hookdata=Array("content"=>'',"iteminfo"=>$newitem);
 	call_hooks('cart_do_additem',$hookdata);
 }
-	
+
 function cart_post(&$a) {
 	$cart_formname=preg_replace('/[^a-zA-Z0-9\_]/','',$_POST["cart_posthook"]);
 	$formhook = "cart_post_".$cart_formname;
@@ -1179,7 +1179,7 @@ function cart_pagecontent($a=null) {
     $observer_hash = get_observer_hash();
 
     $is_seller = ((local_channel()) && (local_channel() == \App::$profile['profile_uid']) ? true : false);
-	
+
     // Determine if the observer is the channel owner so the ACL dialog can be populated
     if ($is_seller) {
 		// DO Seller Specific Setup
@@ -1198,14 +1198,14 @@ function cart_pagecontent($a=null) {
 			notice ( t('Order not found.' . EOL));
 			return "<h1>Order Not Found</h1>";
 		}
-		
+
 		$cart_template = get_markup_template('basic_cart.tpl','addon/cart/');
 		call_hooks('cart_show_order_filter',$cart_template);
 		$order = cart_loadorder($orderhash);
 		return replace_macros($cart_template, $order);
 	}
-		
-		
+
+
     if ((argc() >= 3) && (argv(2) == 'catalog')) {
 		$items = Array();
 
@@ -1233,7 +1233,7 @@ function cart_pagecontent($a=null) {
 		if (!orderhash) {
 			return "<h1>".t("No Order Found")."</h1>";
 		}
-		
+
 		$order = cart_loadorder($orderhash);
 
 		$hookname='cart_checkout_'.argv(3);
@@ -1251,7 +1251,7 @@ function cart_pagecontent($a=null) {
 
 	$templatevalues = Array("menu"=>$menu);
 	call_hooks('cart_mainmenu_filter',$templatevalues);
-	
+
     $template = get_markup_template('menu.tpl','addon/cart/');
 	return replace_macros($template, $templatevalues);
 
@@ -1261,7 +1261,7 @@ function cart_checkout_start (&$hookdata) {
 
 	$display = $hookdata["checkoutdisplay"];
 	do_checkout_before($hookdata);
-	
+
 	$manualpayments = get_pconfig(local_channel(),'cart','enable_manual_payments');
 	$manualpayments = isset($manualpayments) ? $manualpayments : false;
 
@@ -1270,7 +1270,7 @@ function cart_checkout_start (&$hookdata) {
 	/*
 	 * @todo: filter $paymentopts by "enabled" & properly configured payment options
 	 */
-	 
+
 	$hookdata["paymentopts"] = $paymentopts;
 	/*
 	 * Each element of the ["paymentopts"] array is expected to have the following structure:
@@ -1284,7 +1284,7 @@ function cart_checkout_start (&$hookdata) {
 
     $template = get_markup_template('basic_checkout_start.tpl','addon/cart/');
 	$display = replace_macros($template, $hookdata);
-	
+
 	$hookdata["checkoutdisplay"] = $display;
 	call_hooks ('cart_checkout_start',$hookdata);
 	return $hookdata["checkoutdisplay"];
@@ -1302,5 +1302,5 @@ function cart_get_test_catalog (&$items) {
 		"sku-5"=>Array("item_sku"=>"sku-5","item_desc"=>"Description Item 5","item_price"=>9.55),
 		"sku-6"=>Array("item_sku"=>"sku-6","item_desc"=>"Description Item 6","item_price"=>10.55)
 	));
-	
+
 }
