@@ -1267,6 +1267,10 @@ function cart_pagecontent($a=null) {
 		call_hooks('cart_main_'.$hookname,$page);
   }
 
+  $aside = \App::$page['aside'];
+  call_hooks ('cart_aside_filter',$aside);
+	\App::$page['aside'] =  $aside;
+
 	return $page;
 
 }
