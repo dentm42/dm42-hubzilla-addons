@@ -298,7 +298,7 @@ function cart_additem_hook (&$hookdata) {
 //function cart_do_additem (array $iteminfo,&$c) {
 function cart_do_additem (&$hookdata) {
 
-        $startcontent = $hookdata["content"];
+  $startcontent = $hookdata["content"];
 	$iteminfo=$hookdata["iteminfo"];
 	$cart_itemtypes = cart_maybeunjson(get_pconfig("cart_itemtypes"));
 	$required = Array("item_sku","item_qty","item_desc","item_price");
@@ -976,14 +976,15 @@ function cart_load(){
 	Zotlabs\Extend\Hook::register('cart_before_checkout','addon/cart/cart.php','cart_calc_totals',1,10);
 	Zotlabs\Extend\Hook::register('cart_calc_totals','addon/cart/cart.php','cart_calc_totals',1,50);
 	Zotlabs\Extend\Hook::register('cart_display_after','addon/cart/cart.php','cart_display_totals',1,99);
-	Zotlabs\Extend\Hook::register('cart_mod_content','addon/cart/cart.php','cart_mod_content',1,99);
+	//Zotlabs\Extend\Hook::register('cart_mod_content','addon/cart/cart.php','cart_mod_content',1,99);
 	Zotlabs\Extend\Hook::register('cart_post_add_item','addon/cart/cart.php','cart_post_add_item');
 
 	$manualpayments = get_pconfig ($id,'cart','enable_manual_payments');
-
 	if ($manualpayments) {
 		cart_manualpayments_load();
 	}
+	require_once('./myshop.php');
+	cart_myshop_unload();
 }
 
 function cart_unload(){
@@ -1001,10 +1002,13 @@ function cart_unload(){
 	Zotlabs\Extend\Hook::unregister('cart_before_checkout','addon/cart/cart.php','cart_calc_totals',1,10);
 	Zotlabs\Extend\Hook::unregister('cart_calc_totals','addon/cart/cart.php','cart_calc_totals',1,10);
 	Zotlabs\Extend\Hook::unregister('cart_display_after','addon/cart/cart.php','cart_display_totals',1,99);
-	Zotlabs\Extend\Hook::unregister('cart_mod_content','addon/cart/cart.php','cart_mod_content',1,99);
+	//Zotlabs\Extend\Hook::unregister('cart_mod_content','addon/cart/cart.php','cart_mod_content',1,99);
 	Zotlabs\Extend\Hook::unregister('cart_post_add_item','addon/cart/cart.php','cart_post_add_item');
 	require_once('./manual_payments.php');
 	cart_manualpayments_unload();
+	require_once('./myshop.php');
+	cart_myshop_unload();
+
 }
 
 function cart_module() { return; }
@@ -1144,6 +1148,8 @@ function cart_post(&$a) {
 	goaway($url);
 }
 
+
+/* @todo: rework as filter
 function cart_mod_content(&$arr) {
   $aside = "";
   call_hooks ('cart_aside_filter',$aside);
@@ -1152,6 +1158,7 @@ function cart_mod_content(&$arr) {
   $arr['replace'] = true;
   return ;
 }
+*/
 
 function cart_pagecontent($a=null) {
 
@@ -1252,8 +1259,15 @@ function cart_pagecontent($a=null) {
 	$templatevalues = Array("menu"=>$menu);
 	call_hooks('cart_mainmenu_filter',$templatevalues);
 
-    $template = get_markup_template('menu.tpl','addon/cart/');
-	return replace_macros($template, $templatevalues);
+  $template = get_markup_template('menu.tpl','addon/cart/');
+	$page = replace_macros($template, $templatevalues);
+
+  if ((argc() > 2)) {
+    $hookname=preg_replace('/[^a-zA-Z0-9\_]/','',argv(2));
+		call_hooks('cart_main_'.$hookname,$page);
+  }
+
+	return $page;
 
 }
 
