@@ -8,12 +8,50 @@ function cart_myshop_unload(){
 	Zotlabs\Extend\Hook::unregister('cart_main_myshop', 'addon/cart/cart.php', 'cart_construct_page');
 }
 
-function cart_myshop_openorders ($limit=100,$offset=1) {
+/* FUTURE/TODO
 
+function cart_myshop_searchparams ($search) {
+
+  $keys = Array (
+		"order_hash"=>Array("key"=>"order_hash","cast"=>"'%s'","escfunc"=>"dbesc"),
+
+		"item_desc"=>Array("key"=>"item_desc","cast"=>"'%s'","escfunc"=>"dbesc"),
+		"item_type"=>Array("key"=>"item_type","cast"=>"'%s'","escfunc"=>"dbesc"),
+		"item_sku"=>Array("key"=>"item_sku","cast"=>"'%s'","escfunc"=>"dbesc"),
+		"item_qty"=>Array("key"=>"item_qty","cast"=>"%d","escfunc"=>"intval"),
+		"item_price"=>Array("key"=>"item_price","cast"=>"%f","escfunc"=>"floatval"),
+		"item_tax_rate"=>Array("key"=>"item_tax_rate","cast"=>"%f","escfunc"=>"floatval"),
+		"item_meta"=>Array("key"=>"item_meta","cast"=>"'%s'","escfunc"=>"dbesc"),
+		);
+
+	$colnames = '';
+	$valuecasts = '';
+	$params = Array();
+	$count=0;
+	foreach ($keys as $key=>$cast) {
+		if (isset($search[$key])) {
+			$colnames .= ($count > 0) ? "," : '';
+			$colnames .= $cast["key"];
+			$valuecasts .= ($count > 0) ? "," : '';
+			$valuecasts .= $cast["cast"];
+                        $escfunc = $cast["escfunc"];
+                        logger ("[cart] escfunc = ".$escfunc);
+			$params[] = $escfunc($item[$key]);
+			$count++;
+		}
+	}
+}
+*/
+
+function cart_myshop_allorders ($search=null,$limit=100,$offset=1) {
+/**
+  * search = Array of search terms:  //NOT YET IMPLEMENTED
+  *   [""]
+***/
   $seller_hash=get_observer_hash();
-  $r=q("select unique(cart_order.order_hash) as ohash from cart_order,cart_orderitems
+  $r=q("select unique(cart_order.order_hash) from cart_order,cart_orderitems
         where cart_order.order_hash = cart_orderitems.orderhash and
-        seller_channel = '%s' and cart_orderitems.item_fulfilled=false
+        seller_channel = '%s'
         limit=%i offset=%i",
       dbesc($seller_hash),
       intval($limit), intval($offset));
@@ -26,13 +64,16 @@ function cart_myshop_openorders ($limit=100,$offset=1) {
   return $orders;
 }
 
-function cart_myshop_closedorders ($limit=100,$offset=1) {
-
+function cart_myshop_openorders ($search=null,$limit=100,$offset=1) {
+/**
+  * search = Array of search terms:
+  *   [""]
+***/
   $seller_hash=get_observer_hash();
-  $r=q("select order_hash as ohash from cart_order where
-        seller_channel = '%s' and
-        ohash not in (select order_hash from cart_orderitems
-        where item_fulfilled item_fulfilled=false)
+  $r=q("select unique(cart_order.order_hash) from cart_order,cart_orderitems
+        where cart_order.order_hash = cart_orderitems.orderhash and
+        seller_channel = '%s' and cart_orderitems.item_fulfilled is NULL
+        and cart_orderitems.item_confirmed is not NULL
         limit=%i offset=%i",
       dbesc($seller_hash),
       intval($limit), intval($offset));
@@ -41,6 +82,25 @@ function cart_myshop_closedorders ($limit=100,$offset=1) {
 
   foreach ($r as $order) {
     $orders[] = cart_loadorder($order["ohash"]);
+  }
+  return $orders;
+}
+
+function cart_myshop_closedorders ($search=null,$limit=100,$offset=1) {
+
+  $seller_hash=get_observer_hash();
+  $r=q("select order_hash from cart_orders where
+        seller_channel = '%s' and
+        cart_orders.order_hash not in (select order_hash from cart_orderitems
+        where item_fulfilled is not null)
+        limit=%i offset=%i",
+      dbesc($seller_hash),
+      intval($limit), intval($offset));
+
+  if (!$r) {return Array();}
+
+  foreach ($r as $order) {
+    $orders[$order["order_hash"]] = cart_loadorder($order["order_hash"]);
   }
   return $orders;
 }
@@ -64,4 +124,11 @@ function cart_myshop_pagecontent(&$pagecontent) {
     $pagecontent .= "<h4>Access denied.</h4>";
   }
 
+  $pagecontent = cart_myshop_menu();
+
+}
+
+function cart_main_myshop (&$page) {
+
+  $page=cart_myshop_pagecontent($page);
 }

@@ -258,8 +258,6 @@ function cart_additem_hook (&$hookdata) {
 		$item["item_meta"] = cart_maybejson($item["item_meta"]);
 	}
 
-	logger("[cart] AddItem Hookdata: ".print_r($hookdata,true));
-	logger("[cart] AddItem: ".print_r($item,true));
 	$keys = Array (
 		"order_hash"=>Array("key"=>"order_hash","cast"=>"'%s'","escfunc"=>"dbesc"),
 		"item_desc"=>Array("key"=>"item_desc","cast"=>"'%s'","escfunc"=>"dbesc"),
@@ -1273,6 +1271,48 @@ function cart_pagecontent($a=null) {
 
 	return $page;
 
+}
+
+$cart_aside = Array();
+
+function cart_insert_aside ($html,$slug,$priority=35000) {
+	global $cart_aside;
+	/*
+	*  html - HTML to add to aside
+	*  slug - unique slug
+	*  priority - display priority
+	*/
+
+	$cart_aside[$slug][$priority]="<div class='cart-aside-entry cart-aside-'".$slug.">".$html."</div>";
+}
+
+function cart_del_aside ($slug) {
+  global $cart_aside;
+
+	unset($cart_aside['slug']);
+}
+
+function cart_render_aside () {
+	global $cart_aside;
+
+	$rendered_aside='';
+
+	$items=Array();
+	foreach ($cart_aside as $key=>$item) {
+		$slug=$key;
+		$iteminfo=each($item);
+	  $priority=$iteminfo["key"];
+		$items[$priority][$slug]=$iteminfo["value"];
+	}
+
+	if (ksort($items)) {
+    foreach ($items as $item) {
+			foreach ($item as $html) {
+				$rendered .= $html."\n.";
+			}
+		}
+	return ($rendered);
+	}
 }
 
 function cart_checkout_start (&$hookdata) {
