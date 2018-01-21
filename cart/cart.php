@@ -651,7 +651,9 @@ function cart_calc_totals(&$hookdata) {
 }
 
 function cart_do_display (&$hookdata) {
-// *Note: No errors or error messages returned
+
+/* *Note: No errors or error messages returned
+ */
 	$orderhash=$hookdata["order"]["order_hash"];
 
 	$order=cart_loadorder($orderhash);
@@ -1266,7 +1268,7 @@ function cart_pagecontent($a=null) {
   }
 
 	$aside = cart_render_aside();
-  $aside .= \App::$page['aside'];	
+  $aside .= \App::$page['aside'];
   call_hooks ('cart_aside_filter',$aside);
 	\App::$page['aside'] =  $aside;
 

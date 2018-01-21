@@ -124,7 +124,20 @@ function cart_myshop_pagecontent(&$pagecontent) {
     $pagecontent .= "<h4>Access denied.</h4>";
   }
 
-  $pagecontent = cart_myshop_menu();
+  $pagecontent = '';
+  //cart_myshop_menu();
+
+  if ((argc() >= 5) && (argv(3) == 'order')) {
+
+    $orderhash = argv(4);
+    $orderhash = preg_replace('/[^a-z0-9]/','',$orderhash);
+		$order = cart_loadorder($orderhash);
+    $channel=\App::get_channel();
+		$channel_hash=$channel["channel_hash"];
+		if (!$order || $order["seller_channel"]!=$channel_hash) {
+			return "<h1>".t("Order Not Found")."</h1>";
+		}
+  }
 
 }
 
