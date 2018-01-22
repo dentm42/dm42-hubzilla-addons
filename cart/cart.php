@@ -175,7 +175,9 @@ function cart_loadorder ($orderhash) {
 
 	if (!$r) {
                 logger ("[cart] Cart Has No Items");
-		return Array("order"=>$order,"items"=>null);
+                $hookdata=$order;
+	        call_hooks("cart_loadorder",$hookdata);
+                return $hookdata;
 	}
 	$items=Array();
 	foreach ($r as $key=>$iteminfo) {
@@ -251,13 +253,14 @@ function cart_getorderhash ($create=false) {
 
 function cart_additem_hook (&$hookdata) {
 
-	$order=$hookdata["order"];
+        $order=$hookdata["order"];
 	$item=$hookdata["item"];
+        logger ("[cart] additem_hook - hookdata: ".print_r($hookdata,true));
         $item["order_hash"] = $order["order_hash"];
 	if (isset($item["item_meta"])) {
 		$item["item_meta"] = cart_maybejson($item["item_meta"]);
 	}
-
+        logger("[cart] cart_additem_hook - item: ".print_r($item,true));
 	$keys = Array (
 		"order_hash"=>Array("key"=>"order_hash","cast"=>"'%s'","escfunc"=>"dbesc"),
 		"item_desc"=>Array("key"=>"item_desc","cast"=>"'%s'","escfunc"=>"dbesc"),
@@ -315,8 +318,9 @@ function cart_do_additem (&$hookdata) {
 	if ($itemtype && !array_has_key($cart_itemtypes,$iteminfo['item_type'])) {
 		unset ($iteminfo['item_type']);
 	}
-
-	$calldata = Array('order'=>$order,'item'=>$iteminfo);
+        $calldata['order'] = $order;
+        $calldata['item']=$iteminfo;
+	//$calldata = Array('order'=>$order,'item'=>$iteminfo);
 	$itemtype = isset($calldata['item']['item_type']) ? $calldata['item']['item_type'] : null;
 
 	if ($itemtype) {
@@ -362,7 +366,7 @@ function cart_do_additem (&$hookdata) {
 	}
 
 	if (!isset($calldata["item"])) { return; }
-
+        logger ('[cart] call_hooks[cart_order_additem] calldata: '.print_r($calldata,true));
 	call_hooks('cart_order_additem',$calldata);
 	$hookdata["content"] .= isset($calldata["content"]) ? $calldata["content"] :'';
 	unset($calldata["content"]);
@@ -976,14 +980,16 @@ function cart_load(){
 	Zotlabs\Extend\Hook::register('cart_before_checkout','addon/cart/cart.php','cart_calc_totals',1,10);
 	Zotlabs\Extend\Hook::register('cart_calc_totals','addon/cart/cart.php','cart_calc_totals',1,50);
 	Zotlabs\Extend\Hook::register('cart_display_after','addon/cart/cart.php','cart_display_totals',1,99);
-	//Zotlabs\Extend\Hook::register('cart_mod_content','addon/cart/cart.php','cart_mod_content',1,99);
+	Zotlabs\Extend\Hook::register('cart_mod_content','addon/cart/cart.php','cart_mod_content',1,99);
 	Zotlabs\Extend\Hook::register('cart_post_add_item','addon/cart/cart.php','cart_post_add_item');
+	//Zotlabs\Extend\Hook::register('cart_checkout_start','addon/cart/cart.php','cart_checkout_start');
 
-	$manualpayments = get_pconfig ($id,'cart','enable_manual_payments');
-	if ($manualpayments) {
-		cart_manualpayments_load();
-	}
-	require_once('./myshop.php');
+	//$manualpayments = get_pconfig ($id,'cart','enable_manual_payments');
+	//if ($manualpayments) {
+	//}
+	require_once("manual_payments.php");
+	cart_manualpayments_load();
+	require_once("myshop.php");
 	cart_myshop_unload();
 }
 
@@ -1002,18 +1008,19 @@ function cart_unload(){
 	Zotlabs\Extend\Hook::unregister('cart_before_checkout','addon/cart/cart.php','cart_calc_totals',1,10);
 	Zotlabs\Extend\Hook::unregister('cart_calc_totals','addon/cart/cart.php','cart_calc_totals',1,10);
 	Zotlabs\Extend\Hook::unregister('cart_display_after','addon/cart/cart.php','cart_display_totals',1,99);
-	//Zotlabs\Extend\Hook::unregister('cart_mod_content','addon/cart/cart.php','cart_mod_content',1,99);
+	Zotlabs\Extend\Hook::unregister('cart_mod_content','addon/cart/cart.php','cart_mod_content',1,99);
 	Zotlabs\Extend\Hook::unregister('cart_post_add_item','addon/cart/cart.php','cart_post_add_item');
-	require_once('./manual_payments.php');
+	//Zotlabs\Extend\Hook::unregister('cart_checkout_start','addon/cart/cart.php','cart_checkout_start');
+	require_once("manual_payments.php");
 	cart_manualpayments_unload();
-	require_once('./myshop.php');
+	require_once('myshop.php');
 	cart_myshop_unload();
 
 }
 
 function cart_module() { return; }
 
-function cart_settings_post(&$a,&$s) {
+function cart_settings_post(&$s) {
 	if(! local_channel())
 		return;
 
@@ -1150,6 +1157,7 @@ function cart_post(&$a) {
 
 
 /* @todo: rework as filter
+*/
 function cart_mod_content(&$arr) {
   $aside = "";
   call_hooks ('cart_aside_filter',$aside);
@@ -1158,7 +1166,6 @@ function cart_mod_content(&$arr) {
   $arr['replace'] = true;
   return ;
 }
-*/
 
 function cart_pagecontent($a=null) {
 
@@ -1195,7 +1202,6 @@ function cart_pagecontent($a=null) {
 
 	if ((argc() >= 3) && (argv(2) === 'order')) {
 		$orderhash=argv(3);
-
 		if ($orderhash == '') {
 			$orderhash = cart_getorderhash(false);
 			$_SESSION["cart_order_hash"] = $orderhash;
@@ -1209,9 +1215,9 @@ function cart_pagecontent($a=null) {
 		$cart_template = get_markup_template('basic_cart.tpl','addon/cart/');
 		call_hooks('cart_show_order_filter',$cart_template);
 		$order = cart_loadorder($orderhash);
+                logger ("ORDER: ".print_r($order,true));
 		return replace_macros($cart_template, $order);
 	}
-
 
     if ((argc() >= 3) && (argv(2) == 'catalog')) {
 		$items = Array();
@@ -1222,6 +1228,7 @@ function cart_pagecontent($a=null) {
 		if ($testcatalog) {
 			Zotlabs\Extend\Hook::insert('cart_get_catalog','cart_get_test_catalog',1,0);
 		}
+		logger ("TESTCATALOG: $testcatalog");
 		call_hooks('cart_get_catalog',$items);
 		call_hooks('cart_filter_catalog',$items);
 		if (count($items)<1) {
@@ -1233,7 +1240,7 @@ function cart_pagecontent($a=null) {
 
 	if ((argc() >= 3) && (argv(2) == 'checkout')) {
 		if (argc() == 3) {
-			goaway(z_root() . '/cart/' . $nick . '/checkout/start');
+			goaway(z_root() . '/cart/' . argv(1) . '/checkout/start');
 		}
 		$orderhash = cart_getorderhash(false);
 
@@ -1249,7 +1256,7 @@ function cart_pagecontent($a=null) {
 
 		if ($order["checkoutdisplay"]=='') {
 			notice(t("An unknown error has occurred Please start again.") . EOL );
-			goaway(z_root() . '/cart/' . $nick . '/checkout/start');
+			goaway(z_root() . '/cart/' . $sellernick . '/checkout/start');
 		}
 		return $order["checkoutdisplay"];
 	}
@@ -1321,7 +1328,7 @@ function cart_render_aside () {
 function cart_checkout_start (&$hookdata) {
 
 	$display = $hookdata["checkoutdisplay"];
-	do_checkout_before($hookdata);
+	cart_do_checkout_before($hookdata);
 
 	$manualpayments = get_pconfig(local_channel(),'cart','enable_manual_payments');
 	$manualpayments = isset($manualpayments) ? $manualpayments : false;
