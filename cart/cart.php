@@ -626,9 +626,10 @@ function cart_display_item (&$hookdata) {
 
 }
 
+
 function cart_calc_totals(&$hookdata) {
-	$orderhash=isset($hookdata["order"]["order_hash"]) ? $hookdata["order"]["order_hash"] : null;
-	if (!$order_hash) {return;}
+	$orderhash=isset($hookdata["order_hash"]) ? $hookdata["order_hash"] : null;
+	if (!$orderhash) {return;}
 	$order=cart_loadorder($orderhash);
 	if ($order["checkedout"]!=null) { return; }
 	$ordermeta=$order["order_meta"];
@@ -637,21 +638,21 @@ function cart_calc_totals(&$hookdata) {
 	$taxtotal=0;
 	$ordertotal=0;
 	foreach ($items as $key=>$item) {
-		$linetotal=$item["qty"]*$item["item_price"];
+		$linetotal=floatval($item["item_qty"])*floatval($item["item_price"]);
 		$hookdata["order"]["items"][$key]["extended"]=$linetotal;
 
-		$linetax=$linetotal * $item["item_tax_rate"];
+		$linetax=floatval($linetotal) * floatval($item["item_tax_rate"]);
 
-		$subtotal = $subtotal + $linetotal;
-		$taxtotal = $taxtotal + $linetax;
+		$subtotal = floatval($subtotal) + floatval($linetotal);
+		$taxtotal = floatval($taxtotal) + floatval($linetax);
 	}
 	$ordertotal = $subtotal+$taxtotal;
-	$order["order_meta"]["totals"]["Tax"]=sprintf("%01.2f",$taxtotal);
-	$order["order_meta"]["totals"]["Subtotal"]=sprintf("%01.2f",$subtotal);
-	$order["order_meta"]["totals"]["OrderTotal"]=sprintf("%01.2f",$ordertotal);
-	call_hooks("cart_calc_totals",$order);
-	cart_update_ordermeta($order["order_meta"],$orderhash);
-	$hookdata["order"]["totals"]=$ordermeta["totals"];
+	$order["order_meta"]["totals"]["Tax"]=number_format(round($taxtotal,2),2);
+	$order["order_meta"]["totals"]["Subtotal"]=number_format(round($subtotal,2),2);
+	$order["order_meta"]["totals"]["OrderTotal"]=number_format(round($ordertotal,2),2);
+	call_hooks("cart_calc_totals_filter",$order);
+	cart_updateorder_meta($order["order_meta"],$orderhash);
+	$hookdata["totals"]=$order["order_meta"]["totals"];
 }
 
 function cart_do_display (&$hookdata) {
@@ -978,11 +979,11 @@ function cart_load(){
 	Zotlabs\Extend\Hook::register('cart_orderpaid','addon/cart/cart.php','cart_orderpaid_hook');
 	Zotlabs\Extend\Hook::register('cart_do_orderpaid','addon/cart/cart.php','cart_do_orderpaid');
 	Zotlabs\Extend\Hook::register('cart_before_checkout','addon/cart/cart.php','cart_calc_totals',1,10);
-	Zotlabs\Extend\Hook::register('cart_calc_totals','addon/cart/cart.php','cart_calc_totals',1,50);
+	Zotlabs\Extend\Hook::register('cart_calc_totals','addon/cart/cart.php','cart_calc_totals',1,10);
 	Zotlabs\Extend\Hook::register('cart_display_after','addon/cart/cart.php','cart_display_totals',1,99);
 	Zotlabs\Extend\Hook::register('cart_mod_content','addon/cart/cart.php','cart_mod_content',1,99);
 	Zotlabs\Extend\Hook::register('cart_post_add_item','addon/cart/cart.php','cart_post_add_item');
-	//Zotlabs\Extend\Hook::register('cart_checkout_start','addon/cart/cart.php','cart_checkout_start');
+	Zotlabs\Extend\Hook::register('cart_checkout_start','addon/cart/cart.php','cart_checkout_start');
 
 	//$manualpayments = get_pconfig ($id,'cart','enable_manual_payments');
 	//if ($manualpayments) {
@@ -1010,7 +1011,7 @@ function cart_unload(){
 	Zotlabs\Extend\Hook::unregister('cart_display_after','addon/cart/cart.php','cart_display_totals',1,99);
 	Zotlabs\Extend\Hook::unregister('cart_mod_content','addon/cart/cart.php','cart_mod_content',1,99);
 	Zotlabs\Extend\Hook::unregister('cart_post_add_item','addon/cart/cart.php','cart_post_add_item');
-	//Zotlabs\Extend\Hook::unregister('cart_checkout_start','addon/cart/cart.php','cart_checkout_start');
+	Zotlabs\Extend\Hook::unregister('cart_checkout_start','addon/cart/cart.php','cart_checkout_start');
 	require_once("manual_payments.php");
 	cart_manualpayments_unload();
 	require_once('myshop.php');
@@ -1211,11 +1212,10 @@ function cart_pagecontent($a=null) {
 			notice ( t('Order not found.' . EOL));
 			return "<h1>Order Not Found</h1>";
 		}
-
 		$cart_template = get_markup_template('basic_cart.tpl','addon/cart/');
 		call_hooks('cart_show_order_filter',$cart_template);
 		$order = cart_loadorder($orderhash);
-                logger ("ORDER: ".print_r($order,true));
+                call_hooks('cart_calc_totals',$order);
 		return replace_macros($cart_template, $order);
 	}
 
@@ -1253,10 +1253,11 @@ function cart_pagecontent($a=null) {
 		$hookname='cart_checkout_'.argv(3);
 		$order["checkoutdisplay"]='';
 		call_hooks($hookname,$order);
-
-		if ($order["checkoutdisplay"]=='') {
+			notice(t("call: ".$hookname) . EOL );
+                logger("[cart] HOOK ($hookname) : ".print_r($order,true));
+		if ($order["checkoutdisplay"]=='' && argc(3)!='start') {
 			notice(t("An unknown error has occurred Please start again.") . EOL );
-			goaway(z_root() . '/cart/' . $sellernick . '/checkout/start');
+			//goaway(z_root() . '/cart/' . $sellernick . '/checkout/start');
 		}
 		return $order["checkoutdisplay"];
 	}
@@ -1350,11 +1351,11 @@ function cart_checkout_start (&$hookdata) {
 	 * NOTE: Slugs can only contain the characters A-Za-z0-9_-
 	 */
 
-    $template = get_markup_template('basic_checkout_start.tpl','addon/cart/');
+        $template = get_markup_template('basic_checkout_start.tpl','addon/cart/');
 	$display = replace_macros($template, $hookdata);
 
 	$hookdata["checkoutdisplay"] = $display;
-	call_hooks ('cart_checkout_start',$hookdata);
+	call_hooks ('cart_checkout_start_filter',$hookdata);
 	return $hookdata["checkoutdisplay"];
 }
 
