@@ -440,7 +440,7 @@ function cart_updateorder_meta ($meta,$orderhash=null) {
 
 	$storemeta = cart_maybejson($meta);
 
-	$r=q("update cart_order set order_meta = '%s' where order_hash = '%s'",
+	$r=q("update cart_orders set order_meta = '%s' where order_hash = '%s'",
 			dbesc($storemeta),dbesc($orderhash),intval($itemid));
 
 	return;
@@ -650,8 +650,14 @@ function cart_calc_totals(&$hookdata) {
 	$order["order_meta"]["totals"]["Tax"]=number_format(round($taxtotal,2),2);
 	$order["order_meta"]["totals"]["Subtotal"]=number_format(round($subtotal,2),2);
 	$order["order_meta"]["totals"]["OrderTotal"]=number_format(round($ordertotal,2),2);
+	//Preserve order_meta from overwriting by filter
+	$ordermeta=$order["order_meta"];
 	call_hooks("cart_calc_totals_filter",$order);
-	cart_updateorder_meta($order["order_meta"],$orderhash);
+	//Import results of the totals_filter
+	$ordermeta["totals"]=$order["order_meta"]["totals"];
+	//Save order meta data with new totals
+	cart_updateorder_meta($ordermeta,$orderhash);
+	//set return values
 	$hookdata["totals"]=$order["order_meta"]["totals"];
 }
 
