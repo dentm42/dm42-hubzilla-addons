@@ -1337,8 +1337,8 @@ function cart_checkout_start (&$hookdata) {
 	$display = $hookdata["checkoutdisplay"];
 	cart_do_checkout_before($hookdata);
 
-	$manualpayments = get_pconfig(local_channel(),'cart','enable_manual_payments');
-	$manualpayments = isset($manualpayments) ? $manualpayments : false;
+//	$manualpayments = get_pconfig(local_channel(),'cart','enable_manual_payments');
+//	$manualpayments = isset($manualpayments) ? $manualpayments : false;
 
 	$paymentopts = Array();
 	call_hooks('cart_paymentopts',$paymentopts);

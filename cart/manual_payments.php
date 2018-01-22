@@ -49,7 +49,7 @@ function cart_paymentopts_register_manual (&$hookdata) {
 	$manualpayments = get_pconfig(local_channel(),'cart','enable_manual_payments');
 	$manualpayments = isset($manualpayments) ? $manualpayments : false;
 	if ($manualpayments) {
-		$hookdata["manual"]=Array('title'=>'Manual Payment','optionhtml'=>"<b>Pay by Check, Money Order, or other manual payment method</b>");
+		$hookdata["manual"]=Array('title'=>'Manual Payment','html'=>"<b>Pay by Check, Money Order, or other manual payment method</b>");
 	}
     return;
 }
