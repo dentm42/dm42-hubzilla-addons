@@ -48,6 +48,7 @@ function cart_checkout_manual (&$hookdata) {
 function cart_paymentopts_register_manual (&$hookdata) {
 	$manualpayments = get_pconfig(local_channel(),'cart','enable_manual_payments');
 	$manualpayments = isset($manualpayments) ? $manualpayments : false;
+        logger ("[cart] MANUAL PAYMENTS? ".print_r($manual_payments,true));
 	if ($manualpayments) {
 		$hookdata["manual"]=Array('title'=>'Manual Payment','html'=>"<b>Pay by Check, Money Order, or other manual payment method</b>");
 	}
@@ -56,12 +57,12 @@ function cart_paymentopts_register_manual (&$hookdata) {
 
 function cart_manualpayments_unload () {
 
-    Zotlabs\Extend\Hook::unregister('cart_paymentopts','addon/cart/cart.php','cart_paymentopts_register_manual');
+    Zotlabs\Extend\Hook::unregister('cart_paymentopts','addon/cart/manual_payments.php','cart_paymentopts_register_manual');
 
     }
 
 function cart_manualpayments_load () {
 
-    Zotlabs\Extend\Hook::register('cart_paymentopts','addon/cart/cart.php','cart_paymentopts_register_manual');
+    Zotlabs\Extend\Hook::register('cart_paymentopts','addon/cart/manual_payments.php','cart_paymentopts_register_manual');
 
     }

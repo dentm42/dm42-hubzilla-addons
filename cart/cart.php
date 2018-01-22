@@ -1356,7 +1356,7 @@ function cart_checkout_start (&$hookdata) {
 	 * 							)
 	 * NOTE: Slugs can only contain the characters A-Za-z0-9_-
 	 */
-
+        call_hooks('cart_before_checkout',$hookdata);
         $template = get_markup_template('basic_checkout_start.tpl','addon/cart/');
 	$display = replace_macros($template, $hookdata);
 
