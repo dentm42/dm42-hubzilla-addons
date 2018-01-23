@@ -990,6 +990,7 @@ function cart_load(){
 	Zotlabs\Extend\Hook::register('cart_mod_content','addon/cart/cart.php','cart_mod_content',1,99);
 	Zotlabs\Extend\Hook::register('cart_post_add_item','addon/cart/cart.php','cart_post_add_item');
 	Zotlabs\Extend\Hook::register('cart_checkout_start','addon/cart/cart.php','cart_checkout_start');
+	Zotlabs\Extend\Hook::register('cart_post_choose_payment','addon/cart/cart.php','cart_post_choose_payment',1,32000);
 
 	//$manualpayments = get_pconfig ($id,'cart','enable_manual_payments');
 	//if ($manualpayments) {
@@ -1018,6 +1019,7 @@ function cart_unload(){
 	Zotlabs\Extend\Hook::unregister('cart_mod_content','addon/cart/cart.php','cart_mod_content',1,99);
 	Zotlabs\Extend\Hook::unregister('cart_post_add_item','addon/cart/cart.php','cart_post_add_item');
 	Zotlabs\Extend\Hook::unregister('cart_checkout_start','addon/cart/cart.php','cart_checkout_start');
+	Zotlabs\Extend\Hook::unregister('cart_post_choose_payment','addon/cart/cart.php','cart_post_choose_payment',1,32000);
 	require_once("manual_payments.php");
 	cart_manualpayments_unload();
 	require_once('myshop.php');
@@ -1250,7 +1252,7 @@ function cart_pagecontent($a=null) {
 		}
 		$orderhash = cart_getorderhash(false);
 
-		if (!orderhash) {
+		if (!$orderhash) {
 			return "<h1>".t("No Order Found")."</h1>";
 		}
 
@@ -1260,7 +1262,7 @@ function cart_pagecontent($a=null) {
 		$order["checkoutdisplay"]='';
 		call_hooks($hookname,$order);
 			notice(t("call: ".$hookname) . EOL );
-                logger("[cart] HOOK ($hookname) : ".print_r($order,true));
+                //logger("[cart] HOOK ($hookname) : ".print_r($order,true));
 		if ($order["checkoutdisplay"]=='' && argc(3)!='start') {
 			notice(t("An unknown error has occurred Please start again.") . EOL );
 			//goaway(z_root() . '/cart/' . $sellernick . '/checkout/start');
@@ -1332,6 +1334,24 @@ function cart_render_aside () {
 	}
 }
 
+function cart_checkout_pay (&$hookdata) {
+
+	call_hooks ("cart_before_payment",$hookdata);
+
+	if ($hookdata["checkoutdisplay"]=='') {
+		$paytype=$hookdata["order_meta"]["paytype"];
+		$paymentopts = Array();
+		call_hooks('cart_paymentopts',$paymentopts);
+		$hookdata["paymentopts"] = $paymentopts;
+		if (!isset($paymentopts[$paytype])) {
+			notice("Unknown Payment Type.  Please try again." . EOL);
+			goaway(z_root() . '/cart/' . argv(1) . '/checkout/start');
+		}
+		goaway(z_root() . '/cart/' . argv(1) . '/checkout/pay_'.$paytype);
+	}
+
+}
+
 function cart_checkout_start (&$hookdata) {
 
 	$display = $hookdata["checkoutdisplay"];
@@ -1356,13 +1376,52 @@ function cart_checkout_start (&$hookdata) {
 	 * 							)
 	 * NOTE: Slugs can only contain the characters A-Za-z0-9_-
 	 */
-        call_hooks('cart_before_checkout',$hookdata);
-        $template = get_markup_template('basic_checkout_start.tpl','addon/cart/');
+
+	 $orderhash = cart_getorderhash(false);
+
+	 if (!$orderhash) {
+		 return "<h1>".t("No Order Found")."</h1>";
+	 }
+
+	 $ordermeta = cart_getorder_meta($orderhash);
+	 unset($ordermeta["paytype"]);
+	 cart_updateorder_meta($ordermeta,$orderhash);
+
+	call_hooks('cart_before_checkout',$hookdata);
+
+	$template = get_markup_template('basic_checkout_start.tpl','addon/cart/');
 	$display = replace_macros($template, $hookdata);
 
 	$hookdata["checkoutdisplay"] = $display;
 	call_hooks ('cart_checkout_start_filter',$hookdata);
 	return $hookdata["checkoutdisplay"];
+}
+
+function cart_post_choose_payment () {
+
+    if (isset($_POST["paymenttypeslug"])) {
+		  $paymentopts = Array();
+		  call_hooks('cart_paymentopts',$paymentopts);
+		  $hookdata["paymentopts"] = $paymentopts;
+      $payslug = preg_replace("/[^a-zA-Z0-9\-_]",$_POST["paymenttypeslug"]);
+		  if (!isset($paymentopts[$payslug])) {
+  			notice(t('Invalid Payment Type.  Please start again.') . EOL);
+	  		goaway(z_root() . '/cart/' . argv(1) . '/checkout/start');
+  		}
+
+	  	$orderhash = cart_getorderhash(false);
+
+	    if (!$orderhash) {
+  		  notice(t("Order not found"));
+				goaway(z_root() . '/cart/' . argv(1));
+	    }
+
+		  $ordermeta = cart_getorder_meta($orderhash);
+		  $ordermeta["paytype"]=$payslug;
+      cart_updateorder_meta($ordermeta,$orderhash);
+		}
+
+		goaway(z_root() . '/cart/' . argv(1) . '/checkout/pay');
 }
 
 function cart_get_test_catalog (&$items) {
