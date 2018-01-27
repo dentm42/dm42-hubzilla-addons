@@ -2,7 +2,7 @@
 <h4>ORDER: {{$order.order_hash}}</h4>
 </center>
 
-{{include file="basic_cart.tpl"}}
+{{include file="./basic_cart.tpl"}}
 <div class="center">
     <p>Print and send a copy of this invoice along with your check
     or money order to:</p>
