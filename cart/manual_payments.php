@@ -13,12 +13,20 @@ function cart_post_manual_checkout_confirm () {
 	$order = cart_loadorder($orderhash);
 	cart_do_checkout ($order);
 	cart_do_checkout_after ($order);
-
+	//cart_do_fulfill ($order); //No auto fulfillment on manual payments.
+  goaway(z_root() . '/cart/' . $nick . '/checkout/complete');
 }
 
+function cart_checkout_complete (&$hookdata) {
+
+
+}
 function cart_checkout_manual (&$hookdata) {
 
-	$manualpayments = get_pconfig(local_channel(),'cart','enable_manual_payments');
+	$channel = \App::get_channel();
+	$nick_xchann = $channel["channel_hash"];
+
+	$manualpayments = get_pconfig($nick_xchann,'cart','enable_manual_payments');
 	$manualpayments = isset($manualpayments) ? $manualpayments : false;
 
 	if (!$manualpayments) {
