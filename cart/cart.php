@@ -712,7 +712,7 @@ function cart_do_display (&$hookdata) {
 }
 
 function cart_checkout_hook(&$hookdata) {
-	$orderhash = isset($data["order_hash"]) ? $data["order_hash"] : null;
+	$orderhash = isset($hookdata["order_hash"]) ? $hookdata["order_hash"] : null;
 
 	if (!$orderhash) {
 		/*  No order given. */
@@ -795,9 +795,11 @@ function cart_do_checkout_before (&$hookdata) {
 
 function cart_do_checkout (&$hookdata) {
 
+        notice ("[cart] call: cart_do_checkout" . EOL );
 	$orderhash = isset($hookdata["order_hash"]) ? $hookdata["order_hash"] : cart_getorderhash();
 
 	if (!$orderhash) {
+                notice ("[cart] cart_do_checkout - no \$hookdata[order_hash]" . EOL);
 		return;
 	}
 
@@ -818,8 +820,11 @@ function cart_do_checkout (&$hookdata) {
 
 function cart_do_checkout_after (&$hookdata) {
 
+        notice ("[cart] call: cart_do_checkout_after" . EOL );
+
 	$orderhash = isset($hookdata["order_hash"]) ? $hookdata["order_hash"] : cart_getorderhash();
 	if (!$orderhash) {
+                notice ("[cart] cart_do_checkout_after - no \$hookdata[order_hash]");
 		return;
 	}
 

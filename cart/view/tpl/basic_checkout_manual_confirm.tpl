@@ -1,5 +1,5 @@
 <center><h1>INVOICE</h1>
-<h4>ORDER: {{$order.order_hash}}</h4>
+<h4>ORDER: {{$order_hash}}</h4>
 </center>
 
 {{include file="./basic_cart.tpl"}}
@@ -12,6 +12,7 @@
 {{if !$order.checkedout}}
 <form method="post">
     <input type=hidden name="cart_posthook" value="manual_checkout_confirm">
+    <input type=hidden name="orderhash" value="{{$order_hash}}">
     <button class="btn btn-primary" type="submit" name="Confirm" id="newchannel-submit-button" value="Confirm">Confirm Order</button>
 </form>
 {{else}}
